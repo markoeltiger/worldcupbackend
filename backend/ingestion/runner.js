@@ -63,6 +63,15 @@ async function start() {
   }
 }
 
+// Catch unhandled exceptions and promise rejections to prevent process exit in production
+process.on('uncaughtException', (err) => {
+  logger.error('[Ingestion Runner] Uncaught Exception detected:', { error: err.message, stack: err.stack });
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('[Ingestion Runner] Unhandled Promise Rejection detected:', { reason: String(reason) });
+});
+
 // Graceful shutdown handling
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received. Shutting down runner gracefully...');
@@ -78,3 +87,4 @@ start().catch(err => {
   logger.error(`[Ingestion Runner] Startup failed: ${err.message}`, { stack: err.stack });
   process.exit(1);
 });
+

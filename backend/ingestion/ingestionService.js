@@ -99,13 +99,29 @@ async function runIngestionCycle() {
 
       const externalId  = normalized.external_id;
       const newHash     = normalized._eventHash;
-      const previousState = matchStateCache.get(externalId);
 
-      // Skip if nothing changed
-      if (previousState && previousState._eventHash === newHash && normalized.status !== 'LIVE') {
+      // Recover previous state from memory map or persistent cache (survives worker restart)
+      let previousState = matchStateCache.get(externalId);
+      if (!previousState) {
+        previousState = await cache.get(`match:state:${externalId}`);
+        if (previousState) {
+          matchStateCache.set(externalId, previousState);
+        }
+      }
+
+      // Generate a unified state signature capturing status, minute, scores, and event list hash
+      const stateStr = `${normalized.status}:${normalized.minute}:${normalized.home_score}:${normalized.away_score}:${newHash}`;
+      const stateHash = crypto.createHash('md5').update(stateStr).digest('hex');
+      const cacheKey = `match:state_hash:${externalId}`;
+
+      const cachedHash = await cache.get(cacheKey);
+      if (cachedHash === stateHash) {
+        logger.debug(`[Ingestion] Match ${externalId} (${normalized.home_team} vs ${normalized.away_team}) state unchanged. Skipping processing.`);
         skipped++;
         continue;
       }
+
+      logger.info(`[Ingestion] Match ${externalId} changed (${previousState ? 'updating' : 'new'}). Diffing states.`);
 
       // 1. Event Diff Engine
       const diffEvents = diffEngine.diffMatchStates(externalId, previousState, normalized, source);
@@ -147,11 +163,15 @@ async function runIngestionCycle() {
         newDiffEvents: newNonDuplicateEvents
       });
 
-      // Update local state Map
-      matchStateCache.set(externalId, {
+      // Update local memory and persistent cache states
+      const finalState = {
         ...normalized,
         _eventHash: newHash
-      });
+      };
+      matchStateCache.set(externalId, finalState);
+      await cache.set(`match:state:${externalId}`, finalState, 86400);
+      await cache.set(cacheKey, stateHash, 86400);
+
       updated++;
     } catch (err) {
       logger.error(`[Ingestion] Failed to process match: ${err.message}`, { stack: err.stack });

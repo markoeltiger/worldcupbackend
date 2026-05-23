@@ -51,10 +51,14 @@ async function initRedis() {
 async function set(key, value, ttlSeconds = 60) {
   const serialized = JSON.stringify(value);
   if (redisClient) {
-    await redisClient.set(key, serialized, 'EX', ttlSeconds);
-  } else {
-    localCache.set(key, serialized, ttlSeconds);
+    try {
+      await redisClient.set(key, serialized, 'EX', ttlSeconds);
+      return;
+    } catch (err) {
+      logger.warn(`[Cache] Redis set failed for "${key}": ${err.message}. Falling back to NodeCache.`);
+    }
   }
+  localCache.set(key, serialized, ttlSeconds);
 }
 
 /**
@@ -64,7 +68,12 @@ async function set(key, value, ttlSeconds = 60) {
 async function get(key) {
   let raw;
   if (redisClient) {
-    raw = await redisClient.get(key);
+    try {
+      raw = await redisClient.get(key);
+    } catch (err) {
+      logger.warn(`[Cache] Redis get failed for "${key}": ${err.message}. Falling back to NodeCache.`);
+      raw = localCache.get(key);
+    }
   } else {
     raw = localCache.get(key);
   }
@@ -72,13 +81,27 @@ async function get(key) {
 }
 
 async function del(key) {
-  if (redisClient) await redisClient.del(key);
-  else localCache.del(key);
+  if (redisClient) {
+    try {
+      await redisClient.del(key);
+      return;
+    } catch (err) {
+      logger.warn(`[Cache] Redis del failed for "${key}": ${err.message}. Falling back to NodeCache.`);
+    }
+  }
+  localCache.del(key);
 }
 
 async function flush() {
-  if (redisClient) await redisClient.flushdb();
-  else localCache.flushAll();
+  if (redisClient) {
+    try {
+      await redisClient.flushdb();
+      return;
+    } catch (err) {
+      logger.warn(`[Cache] Redis flush failed: ${err.message}. Falling back to NodeCache.`);
+    }
+  }
+  localCache.flushAll();
 }
 
 /**

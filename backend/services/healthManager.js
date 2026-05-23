@@ -72,6 +72,7 @@ function recordSuccess(providerName, latencyMs) {
     if (p.consecutiveSuccessCount >= HALF_OPEN_SUCCESSES_REQUIRED) {
       p.state = STATES.CLOSED;
       p.consecutiveSuccessCount = 0;
+      p.failureCount = 0; // Reset consecutive failures to allow fresh error thresholds
       logger.info(`[Health Manager] Provider ${providerName} fully recovered to CLOSED (active).`);
     }
   }
@@ -173,8 +174,17 @@ function getAverageLatency(providerName) {
  */
 function getMetrics() {
   const metrics = {};
+  const now = Date.now();
   for (const name of PROVIDER_ORDER) {
     const p = healthState[name];
+
+    // Check and transition expired OPEN circuits to HALF_OPEN for real-time telemetry accuracy
+    if (p.state === STATES.OPEN && now >= p.cooldownUntil) {
+      p.state = STATES.HALF_OPEN;
+      p.consecutiveSuccessCount = 0;
+      logger.info(`[Health Manager] Cooldown elapsed. Testing ${name} in HALF_OPEN state (via metrics).`);
+    }
+
     metrics[name] = {
       state: p.state,
       failureCount: p.failureCount,

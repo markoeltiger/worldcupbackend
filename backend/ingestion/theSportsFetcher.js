@@ -86,13 +86,16 @@ async function fetchMatches() {
   const cacheKey = 'thesports:matches';
   
   return cache.getOrSet(cacheKey, async () => {
-    // Check if credentials are placeholders or empty
     const isMock = !THESPORTS_USER || !THESPORTS_SECRET || 
                    THESPORTS_USER.includes('your-') || 
                    THESPORTS_SECRET.includes('your-');
                    
     if (isMock) {
-      logger.info('[TheSports API] No valid credentials found. Falling back to sandbox simulation matches.');
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn('[TheSports API] No credentials configured. Returning empty match list.');
+        return [];
+      }
+      logger.info('[TheSports API] No valid credentials found. Returning sandbox simulation matches.');
       return MOCK_THESPORTS_RESPONSE;
     }
 
@@ -107,10 +110,14 @@ async function fetchMatches() {
         timeout: 5000
       }), { label: 'thesports live matches' });
       
-      return res.data?.results || res.data?.data || [];
+      const data = res.data?.results || res.data?.data;
+      if (!data) {
+        throw new Error('Malformed response from TheSports API (no results/data fields found)');
+      }
+      return data;
     } catch (err) {
-      logger.error(`[TheSports API] Live request failed: ${err.message}. Returning mock sandbox matches as safe fallback.`);
-      return MOCK_THESPORTS_RESPONSE;
+      logger.error(`[TheSports API] Live request failed: ${err.message}`);
+      throw err;
     }
   }, 10); // 10 seconds TTL for fast live score refresh
 }

@@ -133,12 +133,32 @@ async function processPersistMatch(payload) {
     }
   }
 
-  // 4. Update live state cache (which feeds Supabase Realtime)
-  await db.upsertLiveState(
-    persistedMatch.id,
-    { ...matchRow, events },
-    newHash
-  );
+  // 4. Update live state cache if match is active; delete if it has finished
+  const isActive = persistedMatch.status === 'LIVE' || persistedMatch.status === 'HT';
+  if (isActive) {
+    await db.upsertLiveState(
+      persistedMatch.id,
+      { ...matchRow, events },
+      newHash
+    );
+  } else {
+    // Game completed or postponed - remove from live state cache to control API/polling footprint
+    await db.query((client) =>
+      client.from('live_match_state').delete().eq('match_id', persistedMatch.id)
+    ).catch((err) => {
+      // Maybe not present, ignore or log silently
+      logger.debug(`[Queue] Failed to delete completed match from live state cache: ${err.message}`);
+    });
+  }
+
+  // 5. Automate Prediction scoring immediately on FT transition
+  if (persistedMatch.status === 'FT') {
+    logger.info(`[Queue] Match ${persistedMatch.id} finished (FT). Triggering prediction scoring...`);
+    const predictionsService = require('./predictionsService');
+    await predictionsService.scorePredictionsForMatch(persistedMatch.id).catch((err) => {
+      logger.error(`[Queue] Failed scoring predictions for match ${persistedMatch.id}: ${err.message}`, { stack: err.stack });
+    });
+  }
 
   // 5. Trigger notifications & AI summaries asynchronously if change events are detected
   if (newDiffEvents && newDiffEvents.length > 0) {

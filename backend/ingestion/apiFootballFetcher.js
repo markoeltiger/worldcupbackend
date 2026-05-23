@@ -39,6 +39,16 @@ async function apiGet(endpoint, params = {}) {
   );
   dailyCallCount++;
   logger.debug(`[API-Football] ${endpoint} | calls today: ${dailyCallCount}`);
+
+  // API-Football returns errors inside 200 OK responses (e.g. quota limits, invalid tokens)
+  if (response.data?.errors && (
+    (Array.isArray(response.data.errors) && response.data.errors.length > 0) ||
+    (!Array.isArray(response.data.errors) && Object.keys(response.data.errors).length > 0)
+  )) {
+    const errorMsg = JSON.stringify(response.data.errors);
+    throw new Error(`API-Football error response: ${errorMsg}`);
+  }
+
   return response.data?.response || [];
 }
 

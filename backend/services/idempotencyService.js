@@ -19,9 +19,9 @@ function getEventKey(matchId, type, minute, player, provider) {
   const normType = String(type || '').toUpperCase().trim();
   const normMin = String(minute !== undefined ? minute : '').trim();
   const normPlayer = String(player || '').toLowerCase().trim();
-  const normProvider = String(provider || '').toLowerCase().trim();
 
-  const signature = `${normMatchId}:${normType}:${normMin}:${normPlayer}:${normProvider}`;
+  // We exclude provider from signature to deduplicate identical events globally across fallback providers
+  const signature = `${normMatchId}:${normType}:${normMin}:${normPlayer}`;
   return crypto.createHash('md5').update(signature).digest('hex');
 }
 

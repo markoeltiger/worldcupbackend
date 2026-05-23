@@ -1,6 +1,18 @@
 'use strict';
 
-const { evaluatePrediction } = require('../services/predictionsService');
+// Mock Supabase completely to prevent loading the actual DB client and throwing missing ENV errors
+jest.mock('../db/supabase', () => ({
+  getClient: jest.fn(),
+  query: jest.fn(),
+  upsertMatch: jest.fn(),
+  upsertEvent: jest.fn(),
+  upsertLiveState: jest.fn(),
+  upsertLeague: jest.fn(),
+  upsertTeam: jest.fn(),
+}));
+
+const db = require('../db/supabase');
+const { evaluatePrediction, createPrediction } = require('../services/predictionsService');
 
 describe('Predictions Scoring Service', () => {
   const matchResultHomeWin = { home_score: 3, away_score: 1 }; // home win (3-1)
@@ -53,5 +65,33 @@ describe('Predictions Scoring Service', () => {
     
     expect(evaluation.result).toBe('wrong');
     expect(evaluation.points).toBe(0);
+  });
+});
+
+describe('Prediction Submission Kickoff Safety', () => {
+  beforeEach(() => {
+    db.query.mockReset();
+  });
+
+  test('should reject prediction if match status has moved past NS', async () => {
+    db.query.mockResolvedValue({ status: 'LIVE', start_time: new Date(Date.now() + 3600000).toISOString() });
+
+    await expect(createPrediction('user-1', 'match-1', 2, 1))
+      .rejects.toThrow('Cannot predict after match has started');
+  });
+
+  test('should reject prediction if scheduled kickoff time is in the past, even if status is still NS', async () => {
+    db.query.mockResolvedValue({ status: 'NS', start_time: new Date(Date.now() - 10000).toISOString() }); // 10s in past
+
+    await expect(createPrediction('user-1', 'match-1', 2, 1))
+      .rejects.toThrow('Cannot predict after match kickoff time');
+  });
+
+  test('should accept prediction if match status is NS and kickoff is in the future', async () => {
+    db.query.mockResolvedValueOnce({ status: 'NS', start_time: new Date(Date.now() + 3600000).toISOString() }); // 1h in future
+    db.query.mockResolvedValueOnce({ id: 'pred-123', status: 'pending' });
+
+    const res = await createPrediction('user-1', 'match-1', 2, 1);
+    expect(res.id).toBe('pred-123');
   });
 });

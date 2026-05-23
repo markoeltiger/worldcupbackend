@@ -24,11 +24,17 @@ function evaluatePrediction(pred, match) {
 }
 
 async function createPrediction(userId, matchId, predictedHome, predictedAway) {
-  // Check match hasn't started
+  // Check match hasn't started by evaluating both short status AND scheduled kickoff time
   const match = await db.query(d =>
-    d.from('matches').select('status').eq('id', matchId).single()
+    d.from('matches').select('status, start_time').eq('id', matchId).single()
   );
-  if (match.status !== 'NS') throw new Error('Cannot predict after match has started');
+  
+  if (match.status !== 'NS') {
+    throw new Error('Cannot predict after match has started');
+  }
+  if (match.start_time && new Date(match.start_time) <= new Date()) {
+    throw new Error('Cannot predict after match kickoff time');
+  }
 
   return db.query(d =>
     d.from('predictions').upsert({
@@ -57,15 +63,22 @@ async function scorePredictionsForMatch(matchId) {
         .eq('id', pred.id)
     );
     if (points > 0) {
-      await db.query(d =>
-        d.rpc('increment_user_points', { p_user_id: pred.user_id, p_points: points })
-          .catch(() => {
-            // Fallback: direct update if RPC doesn't exist
-            return d.from('users')
-              .update({ total_points: match.total_points + points })
-              .eq('id', pred.user_id);
-          })
-      );
+      await db.query(async (client) => {
+        try {
+          const { error } = await client.rpc('increment_user_points', { p_user_id: pred.user_id, p_points: points });
+          if (error) throw error;
+        } catch (rpcErr) {
+          logger.warn(`[Predictions] increment_user_points RPC failed: ${rpcErr.message}. Falling back to select-and-update.`);
+          const { data: user, error: fetchErr } = await client.from('users').select('total_points').eq('id', pred.user_id).single();
+          if (fetchErr) throw fetchErr;
+          
+          const currentPoints = user?.total_points || 0;
+          const { error: updateErr } = await client.from('users')
+            .update({ total_points: currentPoints + points })
+            .eq('id', pred.user_id);
+          if (updateErr) throw updateErr;
+        }
+      });
     }
     scored++;
   }

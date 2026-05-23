@@ -25,6 +25,14 @@ describe('GoalIQ Event-Driven System Upgrade Suite', () => {
       expect(isDup1).toBe(false); // First run is not duplicate
       expect(isDup2).toBe(true);  // Second run is duplicate
     });
+
+    it('should deduplicate identical events across different providers (cross-provider)', async () => {
+      const isDup1 = await idempotency.checkAndMarkDuplicate('match-xyz', 'goal', 30, 'Salah', 'api_football');
+      const isDup2 = await idempotency.checkAndMarkDuplicate('match-xyz', 'goal', 30, 'Salah', 'sportsdb');
+
+      expect(isDup1).toBe(false); // First provider reports it: not duplicate
+      expect(isDup2).toBe(true);  // Second provider reports it: duplicate (blocked!)
+    });
   });
 
   describe('2. Event Diff Engine', () => {
