@@ -5,7 +5,7 @@ const predictions = require('../../services/predictionsService');
 
 const router = Router();
 
-const { requireAuth } = require('./middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const db = require('../../db/supabase');
 
 // POST /predictions — create a prediction (Protected)
