@@ -1,38 +1,32 @@
 # ============================================================
-# GoalIQ Live — Multi-stage Production Dockerfile
+# GoalIQ Live — Production Dockerfile (Node 20 LTS)
 # ============================================================
 
-# Stage 1: Build & Dependencies
-FROM node:18-alpine AS builder
+# Stage 1: Install all deps (including dev for any build steps)
+FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-# Install development + production dependencies
-RUN npm ci
+RUN npm ci --omit=dev
 
 # Copy source code
 COPY . .
 
-# Stage 2: Production Runner
-FROM node:18-alpine AS runner
+# Stage 2: Lean production runner
+FROM node:20-alpine AS runner
 
 WORKDIR /usr/src/app
 
-COPY package*.json ./
-
-# Only install production dependencies
-RUN npm ci --only=production
-
-# Copy built code from builder
+# Copy only what we need from builder
+COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app .
 
-# Expose API Port
+# Expose API Port (Railway overrides with PORT env var)
 EXPOSE 3001
 
 ENV NODE_ENV=production
 
-# Default command runs the API server. 
-# Override CMD to "node ingestion/runner.js" to run the ingestion daemon.
+# Run server
 CMD ["node", "server.js"]

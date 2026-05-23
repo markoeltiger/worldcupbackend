@@ -1,34 +1,44 @@
-# Node
+# ============================================================
+# GoalIQ Live — .gitignore
+# ============================================================
+
+# --- Node ---
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnp
+.pnp.js
 
-# Environment secrets — NEVER commit .env
+# --- Secrets (NEVER commit) ---
 .env
-*.env.local
-*.env.*.local
+.env.local
+.env.*.local
+*.pem
+firebase-adminsdk*.json
 
-# Logs
+# --- Logs ---
 logs/
 *.log
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Build artifacts
+# --- Build artifacts ---
 dist/
 build/
 .cache/
 
-# Test coverage
+# --- Test coverage ---
 coverage/
 .nyc_output/
 
-# IDE
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- IDE ---
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Playwright browser binaries (heavy)
-backend/node_modules/
+# --- Playwright browser binaries (heavy, not needed in CI/CD) ---
+**/playwright/.local-browsers/

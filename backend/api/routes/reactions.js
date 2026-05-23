@@ -5,7 +5,7 @@ const db = require('../../db/supabase');
 
 const router = Router();
 
-const { requireAuth } = require('./middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // POST /reactions - Add a reaction to a match (Protected)
 router.post('/', requireAuth, async (req, res, next) => {

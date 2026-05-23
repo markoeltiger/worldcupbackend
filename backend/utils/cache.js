@@ -14,18 +14,31 @@ const localCache = new NodeCache({ stdTTL: 60, checkperiod: 30 });
 let redisClient = null;
 
 async function initRedis() {
-  if (!process.env.REDIS_URL) return;
+  if (!process.env.REDIS_URL) {
+    logger.info('No REDIS_URL set — using in-process NodeCache');
+    return;
+  }
   try {
     const Redis = require('ioredis');
     redisClient = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 2,
-      lazyConnect: true,
-      connectTimeout: 3000,
+      connectTimeout: 5000,
+      enableReadyCheck: true,
     });
-    await redisClient.connect();
-    logger.info('Redis cache connected');
+
+    // Wait for the ready event or fail fast
+    await new Promise((resolve, reject) => {
+      redisClient.once('ready', resolve);
+      redisClient.once('error', reject);
+      setTimeout(() => reject(new Error('Redis connect timeout')), 6000);
+    });
+
+    logger.info('✓ Redis cache connected');
   } catch (err) {
-    logger.warn(`Redis unavailable, using in-process cache: ${err.message}`);
+    logger.warn(`Redis unavailable, falling back to in-process cache: ${err.message}`);
+    if (redisClient) {
+      try { redisClient.disconnect(); } catch (_) {}
+    }
     redisClient = null;
   }
 }
