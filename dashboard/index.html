@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoalIQ Live — Sports Data Console</title>
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-mode">
+
+  <!-- Floating Glow Orbs -->
+  <div class="glow-orb orb-1"></div>
+  <div class="glow-orb orb-2"></div>
+
+  <!-- Header Banner -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="logo-icon">⚽</div>
+        <div>
+          <h1>GoalIQ <span class="accent-text">Live</span></h1>
+          <p class="subtitle">Distributed Sports Architecture Dashboard</p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <div class="connection-status" id="user-auth-badge" style="cursor: pointer; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.25);">
+          👤 <span id="auth-username-text">Guest Mode</span>
+        </div>
+        <div class="connection-status">
+          <span class="status-indicator online"></span>
+          <span id="backend-status-text">Backend Connected</span>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-container">
+    
+    <!-- Tab Controls -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="live-matches">⚡ Live Scores</button>
+      <button class="tab-btn" data-tab="predictions-tab">🏆 Predictions & Streak</button>
+      <button class="tab-btn" data-tab="insights-tab">🧠 AI Commentary</button>
+      <button class="tab-btn" data-tab="leaderboard-tab">📊 Leaderboard</button>
+      <button class="tab-btn" data-tab="system-control">🛠️ Ingestion Console</button>
+    </nav>
+
+    <!-- Content Sections -->
+    <div class="tab-content active" id="live-matches">
+      <section class="matches-grid" id="live-matches-grid">
+        <!-- Live Match Card Sample (Loading State) -->
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </section>
+    </div>
+
+    <!-- Predictions Tab -->
+    <div class="tab-content" id="predictions-tab">
+      <div class="split-layout">
+        <div class="glass-card prediction-form-card">
+          <h2>Predict Upcoming Match</h2>
+          <form id="prediction-form" class="styled-form">
+            <div class="form-group">
+              <label for="pred-match-select">Choose Fixture</label>
+              <select id="pred-match-select" required>
+                <option value="">Loading matches...</option>
+              </select>
+            </div>
+            
+            <div class="prediction-vs">
+              <div class="team-input">
+                <span id="pred-home-name" class="team-label">Home Team</span>
+                <input type="number" id="pred-home-score" min="0" placeholder="0" required>
+              </div>
+              <span class="vs-text">VS</span>
+              <div class="team-input">
+                <span id="pred-away-name" class="team-label">Away Team</span>
+                <input type="number" id="pred-away-score" min="0" placeholder="0" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="pred-user-select">Predicting As User</label>
+              <select id="pred-user-select" required>
+                <option value="">Select User...</option>
+              </select>
+            </div>
+
+            <button type="submit" class="primary-btn">Submit Match Prediction</button>
+          </form>
+        </div>
+
+        <div class="glass-card active-predictions-card">
+          <h2>Recent Predictions</h2>
+          <div class="predictions-list" id="predictions-list-container">
+            <p class="empty-state">No predictions loaded.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Insights Tab -->
+    <div class="tab-content" id="insights-tab">
+      <div class="insights-container">
+        <div class="glass-card matches-selector-card">
+          <h2>Select Match to View Insights</h2>
+          <div class="match-list-simple" id="insights-match-list">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+        
+        <div class="glass-card insights-feed-card">
+          <h2>🧠 Live AI Match Analysis</h2>
+          <div class="insights-feed" id="insights-feed-container">
+            <p class="empty-state">Select a match on the left to review AI predictions and commentary.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard Tab -->
+    <div class="tab-content" id="leaderboard-tab">
+      <div class="glass-card leaderboard-card">
+        <div class="card-header">
+          <h2>Global Point Leaderboard</h2>
+          <span class="badge">MVP Ranking</span>
+        </div>
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>User</th>
+              <th>Total Points</th>
+              <th>Accuracy</th>
+              <th>Form Streak</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-tbody">
+            <!-- Populated via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- System Control Tab -->
+    <div class="tab-content" id="system-control">
+      <div class="split-layout">
+        <div class="glass-card console-card">
+          <h2>System Control Panel</h2>
+          <p class="card-desc">Simulate backend jobs and manage rate limit fallbacks.</p>
+          
+          <div class="control-actions">
+            <div class="action-row">
+              <div>
+                <h3>Trigger Ingestion Pipeline</h3>
+                <p>Fetches real-time scores, evaluates diffs, updates hot DB state.</p>
+              </div>
+              <button id="trigger-ingestion-btn" class="action-btn">Trigger Cycle</button>
+            </div>
+            
+            <div class="action-row">
+              <div>
+                <h3>Database Seeding</h3>
+                <p>Reset and prepopulate tables with matches, users, events, and AI commentary.</p>
+              </div>
+              <button id="seed-db-btn" class="action-btn warning">Seed Database</button>
+            </div>
+            
+            <div class="action-row">
+              <div>
+                <h3>Active Fallback State</h3>
+                <p>Toggle scraper failover mechanism manually for dry-runs.</p>
+              </div>
+              <button id="toggle-fallback-btn" class="action-btn info">Failover: API Primary</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card logs-card">
+          <h2>Realtime Ingestion Logs</h2>
+          <div class="console-logs" id="console-logs-container">
+            <div class="log-line system">[System] Connection established. Waiting for logs...</div>
+          </div>
+      </div>
+      
+      <!-- System Observability & Metrics Row -->
+      <div class="observability-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+        <div class="glass-card">
+          <h2>Provider Health & Circuit Status</h2>
+          <div class="provider-metrics-grid" id="provider-health-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+            <p style="color: var(--text-muted);">Loading provider status...</p>
+          </div>
+        </div>
+        
+        <div class="glass-card">
+          <h2>Queue Telemetry & Aggregator</h2>
+          <div class="queue-telemetry-grid" id="queue-telemetry-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+            <p style="color: var(--text-muted);">Loading queue metrics...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+  </main>
+
+  <footer class="app-footer">
+    <p>GoalIQ Live Sports Network — Powered by Node.js, Supabase, and OpenAI.</p>
+  </footer>
+
+  <!-- Script File -->
+  <script src="app.js"></script>
+</body>
+</html>

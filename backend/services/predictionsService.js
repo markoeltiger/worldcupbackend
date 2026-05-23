@@ -1,0 +1,89 @@
+'use strict';
+
+const logger = require('../utils/logger');
+const db = require('../db/supabase');
+
+const SCORING = {
+  correct_winner: 5,
+  exact_score: 10,
+  correct_diff: 3,
+};
+
+function evaluatePrediction(pred, match) {
+  const ph = pred.predicted_home;
+  const pa = pred.predicted_away;
+  const ah = match.home_score;
+  const aa = match.away_score;
+
+  if (ph === ah && pa === aa) return { result: 'exact_score', points: SCORING.exact_score };
+  if ((ph - pa) === (ah - aa)) return { result: 'correct_diff', points: SCORING.correct_diff };
+  const predWinner = ph > pa ? 'home' : ph < pa ? 'away' : 'draw';
+  const actWinner  = ah > aa ? 'home' : ah < aa ? 'away' : 'draw';
+  if (predWinner === actWinner) return { result: 'correct_winner', points: SCORING.correct_winner };
+  return { result: 'wrong', points: 0 };
+}
+
+async function createPrediction(userId, matchId, predictedHome, predictedAway) {
+  // Check match hasn't started
+  const match = await db.query(d =>
+    d.from('matches').select('status').eq('id', matchId).single()
+  );
+  if (match.status !== 'NS') throw new Error('Cannot predict after match has started');
+
+  return db.query(d =>
+    d.from('predictions').upsert({
+      user_id: userId, match_id: matchId,
+      predicted_home: predictedHome, predicted_away: predictedAway,
+      result: 'pending', points_earned: 0
+    }, { onConflict: 'user_id,match_id' }).select().single()
+  );
+}
+
+async function scorePredictionsForMatch(matchId) {
+  const match = await db.query(d =>
+    d.from('matches').select('*').eq('id', matchId).single()
+  );
+  if (match.status !== 'FT') return;
+
+  const preds = await db.query(d =>
+    d.from('predictions').select('*').eq('match_id', matchId).eq('result', 'pending')
+  );
+
+  let scored = 0;
+  for (const pred of preds) {
+    const { result, points } = evaluatePrediction(pred, match);
+    await db.query(d =>
+      d.from('predictions').update({ result, points_earned: points, updated_at: new Date().toISOString() })
+        .eq('id', pred.id)
+    );
+    if (points > 0) {
+      await db.query(d =>
+        d.rpc('increment_user_points', { p_user_id: pred.user_id, p_points: points })
+          .catch(() => {
+            // Fallback: direct update if RPC doesn't exist
+            return d.from('users')
+              .update({ total_points: match.total_points + points })
+              .eq('id', pred.user_id);
+          })
+      );
+    }
+    scored++;
+  }
+  logger.info(`[Predictions] Scored ${scored} predictions for match ${matchId}`);
+}
+
+async function getUserPredictions(userId, limit = 20) {
+  return db.query(d =>
+    d.from('predictions').select('*, matches(home_team, away_team, home_score, away_score, status)')
+      .eq('user_id', userId).order('created_at', { ascending: false }).limit(limit)
+  );
+}
+
+async function getLeaderboard(limit = 50) {
+  return db.query(d =>
+    d.from('users').select('id, username, display_name, avatar_url, total_points')
+      .order('total_points', { ascending: false }).limit(limit)
+  );
+}
+
+module.exports = { createPrediction, scorePredictionsForMatch, getUserPredictions, getLeaderboard, evaluatePrediction };

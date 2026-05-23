@@ -1,0 +1,40 @@
+name: GoalIQ Live Ingestion
+
+on:
+  schedule:
+    # Run every minute (GitHub Actions maximum frequency limit)
+    - cron: '*/1 * * * *'
+  workflow_dispatch: # Enable manual execution from GitHub UI
+
+jobs:
+  run-ingestion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: backend/package.json
+
+      - name: Install Dependencies
+        run: |
+          cd backend
+          npm ci --only=production
+
+      - name: Run Ingestion Cycle
+        env:
+          # Production Credentials configured in GitHub Repository Secrets
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          SPORTSDB_BASE_URL: https://www.thesportsdb.com/api/v1/json/3
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LOG_LEVEL: info
+        run: |
+          cd backend
+          # Run runner with environment override or run single ingestion cycle
+          node -e "require('./ingestion/ingestionService').runIngestionCycle().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); })"
