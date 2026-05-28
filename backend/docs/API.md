@@ -12,7 +12,22 @@ GoalIQ Live is a production-ready football data backend powered by **API-Footbal
 
 ## Authentication
 
-Currently, the API does not require authentication for public endpoints. Rate limiting is applied to prevent abuse.
+The API uses JWT Bearer token authentication for secured endpoints.
+
+### Authentication Flow
+
+1. **Signup/Login:** Call `POST /api/v1/users/auth` to get a JWT token
+2. **Use Token:** Include the token in the Authorization header for secured endpoints:
+   ```
+   Authorization: Bearer <token>
+   ```
+
+### Secured Endpoints
+
+The following endpoints require authentication:
+- `POST /api/v1/predictions`
+- `POST /api/v1/matches/{id}/comments`
+- `POST /api/v1/reactions`
 
 ---
 
@@ -449,6 +464,235 @@ GET /api/v1/leagues/140/standings?season=2024
   "count": 1
 }
 ```
+
+---
+
+### Users
+
+#### POST `/api/v1/users/auth`
+
+User authentication/signup endpoint. Creates a new user or returns existing user data with a JWT token.
+
+**Request Body:**
+```json
+{
+  "username": "CR7_Goat",
+  "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=CR7",
+  "favorite_team": "Portugal",
+  "country": "Portugal",
+  "is_guest": false
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "token": "GOAL_IQ_SECURE_TOKEN_2026",
+  "user_id": "usr_99a8bc43",
+  "points": 50,
+  "current_streak": 1,
+  "level": 1
+}
+```
+
+**Rules:**
+- New users receive a welcome balance of 50 points
+- JWT token expires in 30 days
+- Avatar URL is auto-generated if not provided
+
+---
+
+#### GET `/api/v1/users/leaderboard`
+
+Returns leaderboard with support for GLOBAL, COUNTRY, and FRIENDS types.
+
+**Query Parameters:**
+- `type` (optional): Leaderboard type - `GLOBAL`, `COUNTRY`, or `FRIENDS` (default: `GLOBAL`)
+- `country` (required for `COUNTRY` type): Country name
+- `user_id` (required for `FRIENDS` type): User ID
+- `limit` (optional): Number of results (default: 50)
+
+**Example Requests:**
+```
+GET /api/v1/users/leaderboard
+GET /api/v1/users/leaderboard?type=COUNTRY&country=Portugal
+GET /api/v1/users/leaderboard?type=FRIENDS&user_id=usr_99a8bc43
+```
+
+**Response:**
+```json
+[
+  {
+    "rank": 1,
+    "username": "MessiTheG",
+    "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=messi",
+    "points": 1450,
+    "streak": 5,
+    "accuracy": 89.4
+  },
+  {
+    "rank": 2,
+    "username": "SofaGuru",
+    "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=Sofa",
+    "points": 1200,
+    "streak": 3,
+    "accuracy": 82.1
+  }
+]
+```
+
+**Rules:**
+- Sorted by points (descending), then streak, then accuracy
+- Accuracy calculated from evaluated predictions
+
+---
+
+### Predictions
+
+#### POST `/api/v1/predictions`
+
+Create a match prediction. Requires authentication via Bearer token.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "match_id": "wc_2",
+  "user_id": "usr_99a8bc43",
+  "predicted_home_score": 2,
+  "predicted_away_score": 1
+}
+```
+
+**Response:**
+```json
+{
+  "prediction_id": "pred_7a4bf0c",
+  "status": "pending",
+  "points_earned": 0
+}
+```
+
+**Rules:**
+- Predictions are locked when match is LIVE or FT
+- Cannot predict on the same match twice
+- Status remains `pending` until match is evaluated
+
+---
+
+### Comments
+
+#### GET `/api/v1/matches/{id}/comments`
+
+Get comments for a specific match.
+
+**Path Parameters:**
+- `id`: Match ID
+
+**Query Parameters:**
+- `limit` (optional): Number of comments (default: 50)
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "c_1",
+      "match_id": "wc_2",
+      "username": "SofaGuru",
+      "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=Sofa",
+      "comment_text": "Neymar looks sharp. Brazil should secure this easily!",
+      "timestamp": 1779934200000,
+      "heart_count": 12,
+      "respect_count": 4,
+      "badges": ["Verified", "Pro"]
+    }
+  ]
+}
+```
+
+---
+
+#### POST `/api/v1/matches/{id}/comments`
+
+Add a comment to a match. Requires authentication via Bearer token.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "comment_text": "Beautiful counter-attack! What a strike!",
+  "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=CR7",
+  "username": "CR7_Goat"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "c_289a42f",
+    "match_id": "wc_2",
+    "username": "CR7_Goat",
+    "avatar_url": "https://api.dicebear.com/7.x/bottts/svg?seed=CR7",
+    "comment_text": "Beautiful counter-attack! What a strike!",
+    "timestamp": 1779934521000,
+    "heart_count": 0,
+    "respect_count": 0,
+    "badges": ["Voter"]
+  }
+}
+```
+
+**Rules:**
+- Profanity filter applied to comment text
+- Badges assigned based on user tier and leaderboard rank
+- Default badge: "Voter"
+
+---
+
+### Reactions
+
+#### POST `/api/v1/reactions`
+
+Add a reaction to a comment. Requires authentication via Bearer token.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "match_id": "wc_2",
+  "comment_id": "c_1",
+  "emoji": "👏"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "current_count": 13
+}
+```
+
+**Rules:**
+- Toggle behavior: same emoji removes the reaction
+- Returns updated reaction count
 
 ---
 
