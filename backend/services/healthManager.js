@@ -9,14 +9,12 @@ const STATES = {
   HALF_OPEN: 'HALF_OPEN'  // Testing recovery
 };
 
-// Default priority order (Strict Production Flow)
-const PROVIDER_ORDER = ['thesports', 'api_football', 'football_data'];
+// Default priority order (API-Football ONLY - no fallbacks)
+const PROVIDER_ORDER = ['api_football'];
 
 // Health database in-memory state
 const healthState = {
-  thesports: createProviderState('thesports'),
-  api_football: createProviderState('api_football'),
-  football_data: createProviderState('football_data')
+  api_football: createProviderState('api_football')
 };
 
 // Threshold configurations

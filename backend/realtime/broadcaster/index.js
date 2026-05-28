@@ -5,6 +5,10 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Realtime broadcast layer — the ONLY place in the backend that uses WebSockets.
  *
+ * IMPORTANT: This broadcaster is ONLY used for LIVE matches.
+ * The ingestion service only processes live matches from API-Football,
+ * so this broadcaster will never receive updates for finished/historical matches.
+ *
  * Uses supabaseRealtime (ws-transport client) exclusively.
  * API routes, ingestion, and middleware must NEVER import this file directly;
  * they interact with it only via batchAggregator.flush().

@@ -5,10 +5,8 @@ const crypto  = require('crypto');
 const logger  = require('../utils/logger');
 const db      = require('../db/supabase');
 const cache   = require('../utils/cache');
-const { fromApiFootball, fromFootballData, fromTheSports } = require('../normalizer');
-const fdFetcher = require('./footballDataFetcher');
-const apiFetcher = require('./apiFootballFetcher');
-const theSportsFetcher = require('./theSportsFetcher');
+const { fromApiFootball } = require('../normalizer');
+const apiFootballService = require('../services/apiFootball');
 const { validateNormalizedMatch } = require('../normalizer/validators');
 
 // New production services
@@ -23,62 +21,35 @@ const matchStateCache = new Map(); // match_external_id → full last normalized
 
 /**
  * Core ingestion cycle. Called by the cron runner every 30–60s.
+ * Uses API-Football ONLY - no fallbacks, no mock data.
  */
 async function runIngestionCycle() {
   logger.info('[Ingestion] Starting cycle…');
   const startedAt = Date.now();
 
   let rawMatches = [];
-  let source = healthManager.getActiveProvider();
+  const source = 'api_football';
 
   // Fetch helper with health tracking and circuit breaker safety
-  async function fetchWithCircuitBreaker(provider) {
+  async function fetchWithCircuitBreaker() {
     const started = Date.now();
     try {
-      let matches = [];
-      if (provider === 'thesports') {
-        matches = await theSportsFetcher.fetchMatches();
-      } else if (provider === 'api_football') {
-        matches = await apiFetcher.fetchLiveMatches();
-      } else if (provider === 'football_data') {
-        matches = await fdFetcher.fetchMatches();
-      }
-      healthManager.recordSuccess(provider, Date.now() - started);
+      const matches = await apiFootballService.live.getLiveMatches();
+      healthManager.recordSuccess(source, Date.now() - started);
       return matches;
     } catch (err) {
-      healthManager.recordFailure(provider);
+      healthManager.recordFailure(source);
       throw err;
     }
   }
 
-  // Attempt fetch with fallback priorities (Strict Production Failover Order)
+  // Attempt fetch - NO fallbacks, return error if API-Football fails
   try {
-    rawMatches = await fetchWithCircuitBreaker(source);
-    logger.info(`[Ingestion] Provider ${source} successfully returned ${rawMatches.length} matches`);
+    rawMatches = await fetchWithCircuitBreaker();
+    logger.info(`[Ingestion] API-Football successfully returned ${rawMatches.length} matches`);
   } catch (err) {
-    logger.warn(`[Ingestion] Primary provider ${source} failed: ${err.message} — trying fallbacks`);
-    const fallbacks = ['thesports', 'api_football', 'football_data'].filter(p => p !== source);
-    let success = false;
-    
-    for (const fallback of fallbacks) {
-      const metrics = healthManager.getMetrics()[fallback];
-      if (metrics.state === 'OPEN') continue; // Skip OPEN circuits in cooldown
-      
-      try {
-        logger.info(`[Ingestion] Switching fallback to: ${fallback}`);
-        rawMatches = await fetchWithCircuitBreaker(fallback);
-        source = fallback;
-        success = true;
-        break;
-      } catch (fErr) {
-        logger.warn(`[Ingestion] Fallback ${fallback} failed: ${fErr.message}`);
-      }
-    }
-    
-    if (!success) {
-      logger.error('[Ingestion] All primary and fallback fetch attempts failed in this cycle.');
-      return;
-    }
+    logger.error(`[Ingestion] API-Football failed: ${err.message}. No fallbacks available. Skipping cycle.`);
+    return;
   }
 
   // ---- Step 2: Normalize + diff + enqueue queue operations --------------------
@@ -87,11 +58,7 @@ async function runIngestionCycle() {
 
   for (const raw of rawMatches) {
     try {
-      const normalized = source === 'thesports'
-        ? fromTheSports(raw)
-        : source === 'api_football'
-        ? fromApiFootball(raw)
-        : fromFootballData(raw);
+      const normalized = fromApiFootball(raw);
 
       // Validate the normalized payload before proceeding with change detection or persistence
       if (!validateNormalizedMatch(normalized)) {
@@ -126,7 +93,7 @@ async function runIngestionCycle() {
       logger.info(`[Ingestion] Match ${externalId} changed (${previousState ? 'updating' : 'new'}). Diffing states.`);
 
       // 1. Event Diff Engine
-      const diffEvents = diffEngine.diffMatchStates(externalId, previousState, normalized, source);
+      const diffEvents = diffEngine.diffMatchStates(externalId, previousState, normalized, 'api_football');
 
       // 2. Idempotency & Deduplication filter
       const newNonDuplicateEvents = [];
@@ -136,7 +103,7 @@ async function runIngestionCycle() {
           ev.type === 'NEW_EVENT' ? ev.payload.type : ev.type,
           ev.type === 'NEW_EVENT' ? ev.payload.minute : ev.payload.minute || 0,
           ev.type === 'NEW_EVENT' ? ev.payload.player : '',
-          source
+          'api_football'
         );
         if (!isDup) {
           newNonDuplicateEvents.push(ev);
@@ -173,7 +140,8 @@ async function runIngestionCycle() {
         events,
         newHash,
         previousHash: previousState?._eventHash || null,
-        newDiffEvents: newNonDuplicateEvents
+        newDiffEvents: newNonDuplicateEvents,
+        source: 'api_football'
       });
 
       // Update local memory and persistent cache states
