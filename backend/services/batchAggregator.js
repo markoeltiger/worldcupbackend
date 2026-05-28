@@ -92,8 +92,14 @@ function flush() {
   }
 
   if (batchesToBroadcast.length > 0) {
+    const broadcaster = require('../realtime/broadcaster');
     batchesToBroadcast.forEach(batch => {
-      logger.info(`[Batch Aggregator] Broadcasted aggregated packet for match ${batch.match_id}: ${batch.updates.length} events, diff: ${JSON.stringify(batch.state_diff)}`);
+      logger.info(`[Batch Aggregator] Broadcasting packet for match ${batch.match_id}: ${batch.updates.length} events, diff: ${JSON.stringify(batch.state_diff)}`);
+      
+      // Trigger Supabase Realtime WebSocket Broadcast Channel
+      broadcaster.broadcastMatchUpdate(batch.match_id, batch.updates, batch.state_diff).catch(err => {
+        logger.error(`[Batch Aggregator] Realtime broadcast failed for match ${batch.match_id}: ${err.message}`);
+      });
       
       // Store in memory list for dashboard ingestion console visualization
       completedBatches.push(batch);

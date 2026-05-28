@@ -6,57 +6,6 @@ const cache = require('../../utils/cache');
 
 const router = Router();
 
-const MOCK_MATCHES_LIVE = [
-  {
-    id: 'mun-liv-101',
-    home_team: 'Manchester United',
-    away_team: 'Liverpool',
-    home_score: 2,
-    away_score: 1,
-    status: 'LIVE',
-    minute: 72,
-    league: 'Premier League',
-    start_time: new Date().toISOString(),
-    venue: 'Old Trafford',
-    events: [
-      { type: 'goal', team_side: 'home', player: 'Marcus Rashford', minute: 14 },
-      { type: 'yellow_card', team_side: 'away', player: 'Virgil van Dijk', minute: 32 },
-      { type: 'goal', team_side: 'away', player: 'Mohamed Salah', minute: 55 },
-      { type: 'goal', team_side: 'home', player: 'Bruno Fernandes', minute: 68 }
-    ]
-  }
-];
-
-const MOCK_MATCHES_ALL = [
-  ...MOCK_MATCHES_LIVE,
-  {
-    id: 'rma-bar-102',
-    home_team: 'Real Madrid',
-    away_team: 'Barcelona',
-    home_score: 3,
-    away_score: 2,
-    status: 'FT',
-    minute: 90,
-    league: 'La Liga',
-    start_time: new Date(Date.now() - 3600 * 3000).toISOString(),
-    venue: 'Santiago Bernabeu',
-    events: []
-  },
-  {
-    id: 'mun-rma-103',
-    home_team: 'Manchester United',
-    away_team: 'Real Madrid',
-    home_score: 0,
-    away_score: 0,
-    status: 'NS',
-    minute: 0,
-    league: 'Premier League',
-    start_time: new Date(Date.now() + 3600 * 24000).toISOString(),
-    venue: 'Old Trafford',
-    events: []
-  }
-];
-
 // GET /matches/live — all currently live matches
 router.get('/live', async (req, res, next) => {
   try {
@@ -67,8 +16,7 @@ router.get('/live', async (req, res, next) => {
     }, 10);
     res.json({ data: data.map(r => r.state), count: data.length });
   } catch (err) {
-    // Failover fallback to mock matches so client dashboard is alive
-    res.json({ data: MOCK_MATCHES_LIVE, count: MOCK_MATCHES_LIVE.length });
+    next(err);
   }
 });
 
@@ -92,12 +40,7 @@ router.get('/', async (req, res, next) => {
     if (error) throw new Error(error.message);
     res.json({ data, count, page: +page, limit: +limit });
   } catch (err) {
-    // Failover fallback to mock matches
-    let filtered = MOCK_MATCHES_ALL;
-    if (req.query.status) {
-      filtered = filtered.filter(m => m.status === req.query.status);
-    }
-    res.json({ data: filtered, count: filtered.length, page: 1, limit: 20 });
+    next(err);
   }
 });
 
@@ -115,14 +58,8 @@ router.get('/:id', async (req, res, next) => {
     }, 15);
     res.json({ data });
   } catch (err) {
-    const match = MOCK_MATCHES_ALL.find(m => m.id === req.params.id);
-    if (match) {
-      res.json({ data: match });
-    } else {
-      res.status(404).json({ error: 'Match not found' });
-    }
+    next(err);
   }
 });
 
 module.exports = router;
-

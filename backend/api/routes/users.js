@@ -7,12 +7,6 @@ const cache = require('../../utils/cache');
 
 const router = Router();
 
-const MOCK_LEADERBOARD = [
-  { id: 'usr-1', username: 'soccer_guru', display_name: 'Soccer Guru', total_points: 120, total_predictions: 15, accuracy_pct: 66.67 },
-  { id: 'usr-2', username: 'predict_master', display_name: 'Prediction Master', total_points: 95, total_predictions: 15, accuracy_pct: 60.00 },
-  { id: 'usr-3', username: 'alex_striker', display_name: 'Alex Striker', total_points: 85, total_predictions: 15, accuracy_pct: 53.33 }
-];
-
 // GET /users/leaderboard - Get predictions leaderboard
 router.get('/leaderboard', async (req, res, next) => {
   try {
@@ -22,7 +16,7 @@ router.get('/leaderboard', async (req, res, next) => {
     , 60); // Cache leaderboard for 1 minute
     res.json({ data });
   } catch (err) {
-    res.json({ data: MOCK_LEADERBOARD });
+    next(err);
   }
 });
 

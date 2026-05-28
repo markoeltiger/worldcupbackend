@@ -9,15 +9,14 @@ const STATES = {
   HALF_OPEN: 'HALF_OPEN'  // Testing recovery
 };
 
-// Default priority order
-const PROVIDER_ORDER = ['football_data', 'api_football', 'sportsdb', 'scraper'];
+// Default priority order (Strict Production Flow)
+const PROVIDER_ORDER = ['thesports', 'api_football', 'football_data'];
 
 // Health database in-memory state
 const healthState = {
-  football_data: createProviderState('football_data'),
+  thesports: createProviderState('thesports'),
   api_football: createProviderState('api_football'),
-  sportsdb: createProviderState('sportsdb'),
-  scraper: createProviderState('scraper')
+  football_data: createProviderState('football_data')
 };
 
 // Threshold configurations
@@ -135,8 +134,8 @@ function getActiveProvider() {
     return name;
   }
 
-  // Scraper is the ultimate catch-all fallback
-  return 'scraper';
+  // Ultimate fallback to primary provider if all circuits are open
+  return PROVIDER_ORDER[0];
 }
 
 /**

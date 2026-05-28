@@ -235,5 +235,73 @@ function fromFootballData(match) {
   };
 }
 
-module.exports = { fromApiFootball, fromSportsDB, fromScraper, fromFootballData, hashEvents };
+const THESPORTS_STATUS_MAP = {
+  1: 'NS',
+  2: 'LIVE',
+  3: 'HT',
+  4: 'LIVE',
+  5: 'LIVE',
+  6: 'LIVE',
+  7: 'FT',
+  8: 'POSTPONED',
+  9: 'CANCELLED',
+  10: 'SUSPENDED'
+};
+
+const THESPORTS_EVENT_MAP = {
+  1: 'goal',
+  2: 'red_card',
+  3: 'yellow_card',
+  4: 'substitution',
+  7: 'own_goal',
+  8: 'penalty',
+  9: 'red_card' // Double yellow
+};
+
+function fromTheSports(match) {
+  const normalizedEvents = (match.events || []).map((ev) => {
+    const type = THESPORTS_EVENT_MAP[ev.type];
+    if (!type) return null;
+    return {
+      external_id: `${match.id}:${ev.type}:${ev.time}:${ev.player_name || ''}`,
+      type,
+      team_side: ev.team === 1 ? 'home' : 'away',
+      player: ev.player_name || null,
+      player_id: null,
+      assist_player: null,
+      minute: ev.time || 0,
+      extra_time: 0,
+      extra: { detail: ev.detail || '' }
+    };
+  }).filter(Boolean);
+
+  return {
+    external_id: match.id?.toString(),
+    home_team: match.home_team?.name || '',
+    away_team: match.away_team?.name || '',
+    home_score: match.home_scores?.[0] ?? 0,
+    away_score: match.away_scores?.[0] ?? 0,
+    status: THESPORTS_STATUS_MAP[match.status_id] || 'NS',
+    minute: match.match_time ? Math.max(0, Math.floor((Date.now() / 1000 - match.match_time) / 60)) : 0,
+    league: match.competition?.name || '',
+    start_time: match.match_time ? new Date(match.match_time * 1000).toISOString() : new Date().toISOString(),
+    venue: match.venue?.name || null,
+    referee: null,
+    source: 'thesports',
+    events: normalizedEvents,
+    _eventHash: hashEvents(normalizedEvents),
+    _meta: {
+      home_team_external_id: match.home_team_id?.toString(),
+      away_team_external_id: match.away_team_id?.toString(),
+      home_team_logo: match.home_team?.logo,
+      away_team_logo: match.away_team?.logo,
+      league_external_id: match.competition_id?.toString(),
+      league_logo: match.competition?.logo,
+      season: match.season || new Date().getFullYear().toString()
+    },
+    updated_at: new Date().toISOString()
+  };
+}
+
+module.exports = { fromApiFootball, fromSportsDB, fromScraper, fromFootballData, fromTheSports, hashEvents };
 

@@ -5,11 +5,11 @@ const crypto  = require('crypto');
 const logger  = require('../utils/logger');
 const db      = require('../db/supabase');
 const cache   = require('../utils/cache');
-const { fromApiFootball, fromSportsDB, fromFootballData } = require('../normalizer');
+const { fromApiFootball, fromFootballData, fromTheSports } = require('../normalizer');
 const fdFetcher = require('./footballDataFetcher');
 const apiFetcher = require('./apiFootballFetcher');
-const sdbFetcher = require('./sportsDBFetcher');
-const scraper    = require('../scraper');
+const theSportsFetcher = require('./theSportsFetcher');
+const { validateNormalizedMatch } = require('../normalizer/validators');
 
 // New production services
 const healthManager = require('../services/healthManager');
@@ -36,14 +36,12 @@ async function runIngestionCycle() {
     const started = Date.now();
     try {
       let matches = [];
-      if (provider === 'football_data') {
-        matches = await fdFetcher.fetchMatches();
+      if (provider === 'thesports') {
+        matches = await theSportsFetcher.fetchMatches();
       } else if (provider === 'api_football') {
         matches = await apiFetcher.fetchLiveMatches();
-      } else if (provider === 'sportsdb') {
-        matches = await sdbFetcher.fetchLiveMatches();
-      } else if (provider === 'scraper') {
-        matches = await scraper.scrapeLiveMatches();
+      } else if (provider === 'football_data') {
+        matches = await fdFetcher.fetchMatches();
       }
       healthManager.recordSuccess(provider, Date.now() - started);
       return matches;
@@ -53,13 +51,13 @@ async function runIngestionCycle() {
     }
   }
 
-  // Attempt fetch with fallback priorities
+  // Attempt fetch with fallback priorities (Strict Production Failover Order)
   try {
     rawMatches = await fetchWithCircuitBreaker(source);
     logger.info(`[Ingestion] Provider ${source} successfully returned ${rawMatches.length} matches`);
   } catch (err) {
     logger.warn(`[Ingestion] Primary provider ${source} failed: ${err.message} — trying fallbacks`);
-    const fallbacks = ['football_data', 'api_football', 'sportsdb', 'scraper'].filter(p => p !== source);
+    const fallbacks = ['thesports', 'api_football', 'football_data'].filter(p => p !== source);
     let success = false;
     
     for (const fallback of fallbacks) {
@@ -89,13 +87,17 @@ async function runIngestionCycle() {
 
   for (const raw of rawMatches) {
     try {
-      const normalized = source === 'football_data'
-        ? fromFootballData(raw)
+      const normalized = source === 'thesports'
+        ? fromTheSports(raw)
         : source === 'api_football'
         ? fromApiFootball(raw)
-        : source === 'sportsdb'
-        ? fromSportsDB(raw)
-        : raw; // scraper already normalized
+        : fromFootballData(raw);
+
+      // Validate the normalized payload before proceeding with change detection or persistence
+      if (!validateNormalizedMatch(normalized)) {
+        logger.warn(`[Ingestion] Match payload failed validation screening. Skipping match ${normalized?.external_id || 'unknown'}`);
+        continue;
+      }
 
       const externalId  = normalized.external_id;
       const newHash     = normalized._eventHash;
@@ -142,13 +144,24 @@ async function runIngestionCycle() {
       }
 
       // 3. Real-Time Batch Aggregator buffering
-      if (newNonDuplicateEvents.length > 0) {
-        const stateDiff = {};
-        if (normalized.home_score !== previousState?.home_score) stateDiff.home_score = normalized.home_score;
-        if (normalized.away_score !== previousState?.away_score) stateDiff.away_score = normalized.away_score;
-        if (normalized.status !== previousState?.status) stateDiff.status = normalized.status;
-        if (normalized.minute !== previousState?.minute) stateDiff.minute = normalized.minute;
+      const stateDiff = {};
+      let hasStateChanges = false;
 
+      if (previousState) {
+        if (normalized.home_score !== previousState.home_score) { stateDiff.home_score = normalized.home_score; hasStateChanges = true; }
+        if (normalized.away_score !== previousState.away_score) { stateDiff.away_score = normalized.away_score; hasStateChanges = true; }
+        if (normalized.status !== previousState.status) { stateDiff.status = normalized.status; hasStateChanges = true; }
+        if (normalized.minute !== previousState.minute) { stateDiff.minute = normalized.minute; hasStateChanges = true; }
+      } else {
+        // First cycle: treat as setup state change
+        stateDiff.home_score = normalized.home_score;
+        stateDiff.away_score = normalized.away_score;
+        stateDiff.status = normalized.status;
+        stateDiff.minute = normalized.minute;
+        hasStateChanges = true;
+      }
+
+      if (newNonDuplicateEvents.length > 0 || hasStateChanges) {
         batchAggregator.addEvents(externalId, newNonDuplicateEvents, stateDiff);
       }
 
