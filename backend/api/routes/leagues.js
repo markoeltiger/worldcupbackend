@@ -15,7 +15,22 @@ const router = Router();
 router.get('/', async (req, res, next) => {
   try {
     const leagues = await apiFootball.leagues.getAllLeagues();
-    res.json({ status: 'ok', data: leagues, count: leagues.length });
+    
+    // Transform to match Android client schema (simplified)
+    const transformedData = leagues.map(league => ({
+      league: {
+        id: league.league.id,
+        name: league.league.name,
+        logo: league.league.logo
+      },
+      country: {
+        name: league.country.name,
+        code: league.country.code,
+        flag: league.country.flag
+      }
+    }));
+
+    res.json({ status: 'success', data: transformedData });
   } catch (err) { next(err); }
 });
 
@@ -29,7 +44,17 @@ router.get('/:id/standings', async (req, res, next) => {
     const currentSeason = season || new Date().getFullYear();
     
     const standings = await apiFootball.standings.getStandings(parseInt(id), parseInt(currentSeason));
-    res.json({ status: 'ok', data: standings, count: standings.length });
+    
+    // Transform to match Android client schema (standings as array of arrays)
+    const transformedData = standings.map(league => ({
+      league: {
+        id: league.league.id,
+        name: league.league.name
+      },
+      standings: league.standings // API-Football already returns standings as array of arrays
+    }));
+
+    res.json({ status: 'success', data: transformedData });
   } catch (err) { next(err); }
 });
 

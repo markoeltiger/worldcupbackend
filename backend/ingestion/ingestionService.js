@@ -15,6 +15,7 @@ const diffEngine = require('../services/diffEngine');
 const idempotency = require('../services/idempotencyService');
 const queueService = require('../services/queueService');
 const batchAggregator = require('../services/batchAggregator');
+const fcmService = require('../services/fcm');
 
 // Track last-seen state per match for change detection
 const matchStateCache = new Map(); // match_external_id → full last normalized state
@@ -94,6 +95,62 @@ async function runIngestionCycle() {
 
       // 1. Event Diff Engine
       const diffEvents = diffEngine.diffMatchStates(externalId, previousState, normalized, 'api_football');
+
+      // 1.5. FCM Notifications for major events
+      for (const ev of diffEvents) {
+        try {
+          if (ev.type === 'NEW_EVENT') {
+            const eventType = ev.payload.type;
+            
+            // Send goal notification
+            if (eventType === 'goal') {
+              await fcmService.sendGoalNotification(
+                externalId,
+                normalized.home_team,
+                normalized.away_team,
+                ev.payload.player || 'Unknown',
+                ev.payload.minute || 0,
+                normalized.home_score,
+                normalized.away_score
+              );
+            }
+            
+            // Send card notification
+            if (eventType === 'yellow_card' || eventType === 'red_card') {
+              await fcmService.sendCardNotification(
+                externalId,
+                normalized.home_team,
+                normalized.away_team,
+                ev.payload.player || 'Unknown',
+                eventType,
+                ev.payload.minute || 0
+              );
+            }
+          }
+          
+          // Send match start notification (when match transitions from NS to LIVE)
+          if (ev.type === 'STATUS_CHANGE' && ev.payload.new_status === 'LIVE' && (!previousState || previousState.status === 'NS')) {
+            await fcmService.sendMatchStartNotification(
+              externalId,
+              normalized.home_team,
+              normalized.away_team
+            );
+          }
+          
+          // Send match end notification (when match transitions from LIVE to FT)
+          if (ev.type === 'STATUS_CHANGE' && ev.payload.new_status === 'FT' && previousState && previousState.status === 'LIVE') {
+            await fcmService.sendMatchEndNotification(
+              externalId,
+              normalized.home_team,
+              normalized.away_team,
+              normalized.home_score,
+              normalized.away_score
+            );
+          }
+        } catch (fcmErr) {
+          logger.error(`[FCM] Failed to send notification for match ${externalId}: ${fcmErr.message}`);
+        }
+      }
 
       // 2. Idempotency & Deduplication filter
       const newNonDuplicateEvents = [];

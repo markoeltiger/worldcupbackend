@@ -42,22 +42,24 @@ router.get('/live', async (req, res, next) => {
     const data = rawMatches.map(fixture => {
       const normalized = fromApiFootball(fixture);
       return {
-        id:         normalized.external_id,
-        home_team:  normalized.home_team,
-        away_team:  normalized.away_team,
-        home_score: normalized.home_score,
-        away_score: normalized.away_score,
-        minute:     normalized.minute,
-        status:     normalized.status,
-        league:     normalized.league,
-        venue:      normalized.venue,
-        kickoff:    normalized.start_time,
-        logo_home:  normalized._meta?.home_team_logo,
-        logo_away:  normalized._meta?.away_team_logo,
+        id:              normalized.external_id,
+        home_team:       normalized.home_team,
+        away_team:       normalized.away_team,
+        home_score:      normalized.home_score,
+        away_score:      normalized.away_score,
+        minute:          normalized.minute,
+        status:          normalized.status,
+        league:          normalized.league,
+        venue:           normalized.venue,
+        kickoff:         normalized.start_time,
+        logo_home:       normalized._meta?.home_team_logo,
+        logo_away:       normalized._meta?.away_team_logo,
+        home_team_logo:  normalized._meta?.home_team_logo,
+        away_team_logo:  normalized._meta?.away_team_logo,
         last_event: Array.isArray(normalized.events) && normalized.events.length > 0
           ? normalized.events[normalized.events.length - 1]
           : null,
-        updated_at: normalized.updated_at,
+        updated_at:      normalized.updated_at,
       };
     });
 
@@ -100,19 +102,21 @@ router.get('/', async (req, res, next) => {
     const data = paginatedFixtures.map(fixture => {
       const normalized = fromApiFootball(fixture);
       return {
-        id:         normalized.external_id,
-        home_team:  normalized.home_team,
-        away_team:  normalized.away_team,
-        home_score: normalized.home_score,
-        away_score: normalized.away_score,
-        minute:     normalized.minute,
-        status:     normalized.status,
-        league:     normalized.league,
-        venue:      normalized.venue,
-        kickoff:    normalized.start_time,
-        logo_home:  normalized._meta?.home_team_logo,
-        logo_away:  normalized._meta?.away_team_logo,
-        updated_at: normalized.updated_at,
+        id:              normalized.external_id,
+        home_team:       normalized.home_team,
+        away_team:       normalized.away_team,
+        home_score:      normalized.home_score,
+        away_score:      normalized.away_score,
+        minute:          normalized.minute,
+        status:          normalized.status,
+        league:          normalized.league,
+        venue:           normalized.venue,
+        kickoff:         normalized.start_time,
+        logo_home:       normalized._meta?.home_team_logo,
+        logo_away:       normalized._meta?.away_team_logo,
+        home_team_logo:  normalized._meta?.home_team_logo,
+        away_team_logo:  normalized._meta?.away_team_logo,
+        updated_at:      normalized.updated_at,
       };
     });
 
@@ -143,24 +147,26 @@ router.get('/:id', async (req, res, next) => {
     const normalized = fromApiFootball(fixture);
     
     const data = {
-      id:         normalized.external_id,
-      home_team:  normalized.home_team,
-      away_team:  normalized.away_team,
-      home_score: normalized.home_score,
-      away_score: normalized.away_score,
-      minute:     normalized.minute,
-      status:     normalized.status,
-      league:     normalized.league,
-      venue:      normalized.venue,
-      referee:    normalized.referee,
-      kickoff:    normalized.start_time,
-      logo_home:  normalized._meta?.home_team_logo,
-      logo_away:  normalized._meta?.away_team_logo,
-      league_id:  normalized._meta?.league_external_id,
-      season:     normalized._meta?.season,
-      country:    normalized._meta?.country,
-      events:     normalized.events || [],
-      updated_at: normalized.updated_at,
+      id:              normalized.external_id,
+      home_team:       normalized.home_team,
+      away_team:       normalized.away_team,
+      home_score:      normalized.home_score,
+      away_score:      normalized.away_score,
+      minute:          normalized.minute,
+      status:          normalized.status,
+      league:          normalized.league,
+      venue:           normalized.venue,
+      referee:         normalized.referee,
+      kickoff:         normalized.start_time,
+      logo_home:       normalized._meta?.home_team_logo,
+      logo_away:       normalized._meta?.away_team_logo,
+      home_team_logo:  normalized._meta?.home_team_logo,
+      away_team_logo:  normalized._meta?.away_team_logo,
+      league_id:       normalized._meta?.league_external_id,
+      season:          normalized._meta?.season,
+      country:         normalized._meta?.country,
+      events:          normalized.events || [],
+      updated_at:      normalized.updated_at,
     };
 
     res.json({ status: 'ok', data });
@@ -206,10 +212,23 @@ router.get('/:id/statistics', async (req, res, next) => {
     const stats = await apiFootball.statistics.getStatistics(parseInt(id));
     
     if (!stats || stats.length === 0) {
-      return res.json({ status: 'ok', data: [], count: 0 });
+      return res.json({ status: 'success', data: [] });
     }
 
-    res.json({ status: 'ok', data: stats, count: stats.length });
+    // Transform to match Android client schema
+    const transformedData = stats.map(stat => ({
+      team: {
+        id: stat.team.id,
+        name: stat.team.name,
+        logo: stat.team.logo
+      },
+      statistics: stat.statistics.map(s => ({
+        type: s.type,
+        value: s.value
+      }))
+    }));
+
+    res.json({ status: 'success', data: transformedData });
   } catch (err) {
     next(err);
   }
@@ -224,10 +243,36 @@ router.get('/:id/lineups', async (req, res, next) => {
     const lineups = await apiFootball.lineups.getLineups(parseInt(id));
     
     if (!lineups || lineups.length === 0) {
-      return res.json({ status: 'ok', data: [], count: 0 });
+      return res.json({ status: 'success', data: [] });
     }
 
-    res.json({ status: 'ok', data: lineups, count: lineups.length });
+    // Transform to match Android client schema
+    const transformedData = lineups.map(lineup => ({
+      team: {
+        id: lineup.team.id,
+        name: lineup.team.name,
+        logo: lineup.team.logo
+      },
+      formation: lineup.formation || null,
+      startXI: lineup.startXI.map(p => ({
+        player: {
+          id: p.player.id,
+          name: p.player.name,
+          number: p.player.number,
+          pos: p.player.pos
+        }
+      })),
+      substitutes: lineup.substitutes.map(p => ({
+        player: {
+          id: p.player.id,
+          name: p.player.name,
+          number: p.player.number,
+          pos: p.player.pos
+        }
+      }))
+    }));
+
+    res.json({ status: 'success', data: transformedData });
   } catch (err) {
     next(err);
   }
