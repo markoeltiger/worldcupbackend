@@ -8,9 +8,15 @@
  * ✅ Safe for:  API routes, ingestion writes, queue processing, auth middleware
  * ❌ Must NOT:  initialize Realtime, open WebSocket connections
  *
- * Node.js 20 does NOT ship native WebSocket. The @supabase/supabase-js SDK
- * will attempt to auto-connect a Realtime WebSocket on the first createClient()
- * call UNLESS realtime is explicitly disabled.  This file disables it entirely.
+ * WHY THIS IS SAFE ON NODE.JS 20
+ * ──────────────────────────────
+ * The @supabase/supabase-js SDK initializes a RealtimeClient internally when
+ * createClient() is called — but it only opens a WebSocket connection when
+ * .channel() or .subscribe() is actually called.  By never calling those
+ * methods here AND by not passing a `realtime` config block (which can still
+ * instantiate internal objects), we guarantee zero WebSocket activity.
+ *
+ * The `ws` package is required only by db/supabaseRealtime.js.
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -20,7 +26,7 @@ let _client = null;
 
 /**
  * Returns the singleton REST-only Supabase admin client.
- * Crashes loudly on missing env vars — fail fast is better than a silent wrong state.
+ * Fails loudly on missing credentials — fail-fast beats silent wrong state.
  *
  * @returns {import('@supabase/supabase-js').SupabaseClient}
  */
@@ -36,20 +42,16 @@ function getAdminClient() {
 
   _client = createClient(url, key, {
     auth: {
-      persistSession:   false,   // No session storage — service role never needs it
-      autoRefreshToken: false,   // No token refresh cycles
-      detectSessionInUrl: false, // No URL-based session detection
+      persistSession:     false,  // Service role — no user session needed
+      autoRefreshToken:   false,  // No refresh cycles
+      detectSessionInUrl: false,  // No URL parsing
     },
-    db: { schema: 'public' },
-    global: {
-      headers: { 'x-application-name': 'goaliq-backend' },
-    },
-    // ─── DISABLE REALTIME ────────────────────────────────────────────────────
-    // Setting fetch explicitly prevents the SDK from spinning up a WebSocket
-    // transport on Node.js 20 during normal REST usage.
-    realtime: {
-      params: { eventsPerSecond: -1 }, // Sentinel value — no subscriptions
-    },
+    db:     { schema: 'public' },
+    global: { headers: { 'x-application-name': 'goaliq-backend' } },
+    // NOTE: We intentionally do NOT pass a `realtime` key here.
+    // Passing any realtime config (even disabled values) can still
+    // trigger SDK internals to construct a RealtimeClient object.
+    // The correct approach is to simply never call .channel() on this client.
   });
 
   logger.info('[supabaseAdmin] REST-only admin client initialized (no WebSocket)');
@@ -61,26 +63,27 @@ function getAdminClient() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Executes a Supabase query builder function and unwraps the result.
+ * Executes a Supabase query builder and unwraps the result.
  * Throws a structured Error on Supabase-level failures.
  *
- * @param {function(SupabaseClient): Promise<{data, error}>} builderFn
+ * @param {function} builderFn  (client) => Promise<{data, error}>
  * @returns {Promise<any>}
  */
 async function query(builderFn) {
-  const db = getAdminClient();
-  const { data, error } = await builderFn(db);
+  const client = getAdminClient();
+  const { data, error } = await builderFn(client);
   if (error) {
     const err = new Error(`[DB] ${error.message}`);
     err.code    = error.code;
     err.details = error.details;
+    err.hint    = error.hint;
     throw err;
   }
   return data;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Domain Upserts
+// Domain Write Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function upsertMatch(matchData) {
@@ -91,18 +94,19 @@ async function upsertMatch(matchData) {
 
 async function upsertEvent(eventData) {
   return query((db) =>
-    db.from('events').upsert(eventData, { onConflict: 'match_id,external_id', ignoreDuplicates: true }).select()
+    db
+      .from('events')
+      .upsert(eventData, { onConflict: 'match_id,external_id', ignoreDuplicates: true })
+      .select()
   );
 }
 
 async function upsertLiveState(matchId, state, eventHash) {
   return query((db) =>
-    db
-      .from('live_match_state')
-      .upsert(
-        { match_id: matchId, state, event_hash: eventHash, updated_at: new Date().toISOString() },
-        { onConflict: 'match_id' }
-      )
+    db.from('live_match_state').upsert(
+      { match_id: matchId, state, event_hash: eventHash, updated_at: new Date().toISOString() },
+      { onConflict: 'match_id' }
+    )
   );
 }
 
@@ -119,15 +123,14 @@ async function upsertTeam(teamData) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Legacy shim — keeps old require('../db/supabase').getClient() working
-// by forwarding to the admin client. This lets us migrate incrementally
-// without touching every file at once.
+// Backward-compatibility alias
+// All existing require('../db/supabase').getClient() calls still work.
 // ─────────────────────────────────────────────────────────────────────────────
 const getClient = getAdminClient;
 
 module.exports = {
   getAdminClient,
-  getClient,        // legacy shim
+  getClient,       // legacy alias
   query,
   upsertMatch,
   upsertEvent,

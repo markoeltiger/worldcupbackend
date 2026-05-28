@@ -1,90 +1,116 @@
 'use strict';
 
-const axios = require('axios');
-const cache = require('../utils/cache');
-const retry = require('../utils/retry');
-const logger = require('../utils/logger');
-
-const API_BASE_URL = 'https://api.football-data.org/v4';
-const API_TOKEN = process.env.FOOTBALL_DATA_API_TOKEN || '16d701177c73495b8c2015dc55e25b6f';
-
-// Setup axios client with default headers
-const client = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'X-Auth-Token': API_TOKEN
-  },
-  timeout: 5000
-});
-
 /**
- * Fetch matches/fixtures from football-data.org with caching layer to minimize API calls and cost.
- * Caches match list for 30 seconds (standard live update window).
+ * footballDataFetcher.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Tertiary data provider: football-data.org (v4 API)
+ *
+ * PRODUCTION RULES:
+ * - API token MUST come from environment — no hardcoded fallback keys
+ * - If token missing → THROW ProviderUnconfiguredError
+ * - If API call fails → THROW (activates failover chain)
  */
-async function fetchMatches(params = {}) {
-  const cacheKey = `football_data:matches:${JSON.stringify(params)}`;
-  
-  return cache.getOrSet(cacheKey, async () => {
-    logger.info(`[FootballData API] Cache miss. Fetching matches from API endpoint: ${JSON.stringify(params)}`);
-    const res = await retry.withRetry(() => client.get('/matches', { params }), { label: 'football-data matches' });
-    return res.data?.matches || [];
-  }, 30); // 30s cache TTL
+
+const axios          = require('axios');
+const cache          = require('../utils/cache');
+const { withRetry }  = require('../utils/retry');
+const logger         = require('../utils/logger');
+
+const API_BASE_URL = process.env.FOOTBALL_DATA_BASE_URL || 'https://api.football-data.org/v4';
+const API_TOKEN    = process.env.FOOTBALL_DATA_API_TOKEN || '';
+
+function getClient() {
+  if (!API_TOKEN) {
+    const err = new Error('[FootballData] API token not configured — skipping this provider');
+    err.code = 'PROVIDER_UNCONFIGURED';
+    throw err;
+  }
+  return axios.create({
+    baseURL: API_BASE_URL,
+    headers: { 'X-Auth-Token': API_TOKEN },
+    timeout: 8000,
+  });
 }
 
 /**
- * Fetch a specific match detail.
- * Caches live match data for 10 seconds, and finished match data for 1 hour.
+ * Fetch live/scheduled matches from football-data.org.
+ *
+ * @param {object} params  Query params (e.g. { status: 'LIVE' })
+ * @throws {Error} on missing token or API failure
+ */
+async function fetchMatches(params = {}) {
+  const cacheKey = `football_data:matches:${JSON.stringify(params)}`;
+
+  return cache.getOrSet(cacheKey, async () => {
+    logger.info(`[FootballData] Fetching matches | params: ${JSON.stringify(params)}`);
+    const client = getClient();
+    const res = await withRetry(
+      () => client.get('/matches', { params }),
+      { retries: 2, baseDelayMs: 1500, label: 'football-data:matches' }
+    );
+    const matches = res.data?.matches || [];
+    logger.info(`[FootballData] Fetched ${matches.length} matches`);
+    return matches;
+  }, 30);
+}
+
+/**
+ * Fetch a single match detail.
+ * Cached 10s for live matches, 1h for finished matches.
  */
 async function fetchMatchDetail(matchId) {
   const cacheKey = `football_data:match:${matchId}`;
-  
   const cached = await cache.get(cacheKey);
   if (cached) return cached;
 
-  logger.info(`[FootballData API] Cache miss. Fetching details for match ID: ${matchId}`);
-  const res = await retry.withRetry(() => client.get(`/matches/${matchId}`), { label: `match detail ${matchId}` });
+  logger.info(`[FootballData] Fetching match detail: ${matchId}`);
+  const client = getClient();
+  const res = await withRetry(
+    () => client.get(`/matches/${matchId}`),
+    { retries: 2, baseDelayMs: 1500, label: `football-data:match:${matchId}` }
+  );
   const match = res.data;
 
-  // Determine TTL: 1 hour if finished (FT), otherwise 10 seconds for live updates
-  const isFinished = match?.status === 'FINISHED';
-  const ttl = isFinished ? 3600 : 10;
-  
+  const ttl = match?.status === 'FINISHED' ? 3600 : 10;
   await cache.set(cacheKey, match, ttl);
   return match;
 }
 
 /**
- * Fetch competition standings.
- * Caches standings for 1 hour (reduces costs for slow-moving data).
+ * Fetch competition standings. Cached 1h.
  */
 async function fetchStandings(competitionCode) {
   const cacheKey = `football_data:standings:${competitionCode}`;
-  
   return cache.getOrSet(cacheKey, async () => {
-    logger.info(`[FootballData API] Cache miss. Fetching standings for: ${competitionCode}`);
-    const res = await retry.withRetry(() => client.get(`/competitions/${competitionCode}/standings`), { label: `competition standings ${competitionCode}` });
+    logger.info(`[FootballData] Fetching standings: ${competitionCode}`);
+    const client = getClient();
+    const res = await withRetry(
+      () => client.get(`/competitions/${competitionCode}/standings`),
+      { retries: 2, baseDelayMs: 1500, label: `football-data:standings:${competitionCode}` }
+    );
     return res.data?.standings || [];
-  }, 3600); // 1 hour cache TTL
+  }, 3600);
 }
 
 /**
- * Fetch team info.
- * Caches details for 24 hours.
+ * Fetch team details. Cached 24h.
  */
 async function fetchTeamDetail(teamId) {
   const cacheKey = `football_data:team:${teamId}`;
-  
   return cache.getOrSet(cacheKey, async () => {
-    logger.info(`[FootballData API] Cache miss. Fetching team details for: ${teamId}`);
-    const res = await retry.withRetry(() => client.get(`/teams/${teamId}`), { label: `team detail ${teamId}` });
+    logger.info(`[FootballData] Fetching team: ${teamId}`);
+    const client = getClient();
+    const res = await withRetry(
+      () => client.get(`/teams/${teamId}`),
+      { retries: 2, baseDelayMs: 1500, label: `football-data:team:${teamId}` }
+    );
     return res.data || null;
-  }, 86400); // 24 hours cache TTL
+  }, 86400);
 }
 
 module.exports = {
   fetchMatches,
   fetchMatchDetail,
   fetchStandings,
-  fetchTeamDetail
+  fetchTeamDetail,
 };
-
