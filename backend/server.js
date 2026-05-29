@@ -29,6 +29,12 @@ const reactionsRouter = require('./api/routes/reactions');
 const insightsRouter = require('./api/routes/insights');
 const systemRouter = require('./api/routes/system');
 
+// Import new football API routes
+const footballMatchesRouter = require('./api/routes/footballMatches');
+const footballLeaguesRouter = require('./api/routes/footballLeagues');
+const footballTeamsRouter = require('./api/routes/footballTeams');
+const worldcupRouter = require('./api/routes/worldcup');
+
 const app = express();
 const PORT = env.PORT;
 const API_VERSION = env.API_VERSION;
@@ -69,12 +75,38 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // ---- API Route Registrations ----
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    env: env.NODE_ENV
-  });
+app.get('/health', async (req, res) => {
+  try {
+    const monitoringService = require('./services/monitoringService');
+    const health = await monitoringService.getHealth();
+    res.status(200).json(health);
+  } catch (error) {
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      env: env.NODE_ENV
+    });
+  }
+});
+
+app.get('/api/v1/system/metrics', async (req, res) => {
+  try {
+    const monitoringService = require('./services/monitoringService');
+    const metrics = monitoringService.getMetrics();
+    res.json(metrics);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/v1/system/providers', async (req, res) => {
+  try {
+    const monitoringService = require('./services/monitoringService');
+    const providers = monitoringService.getProviderStatus();
+    res.json(providers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.use(`/api/${API_VERSION}/matches`, matchesRouter);
@@ -87,6 +119,12 @@ app.use(`/api/${API_VERSION}/matches`, commentsRouter);
 app.use(`/api/${API_VERSION}/reactions`, reactionsRouter);
 app.use(`/api/${API_VERSION}/insights`, insightsRouter);
 app.use(`/api/${API_VERSION}/system`, systemRouter);
+
+// Register new football API routes
+app.use(`/api/${API_VERSION}/football/matches`, footballMatchesRouter);
+app.use(`/api/${API_VERSION}/football/leagues`, footballLeaguesRouter);
+app.use(`/api/${API_VERSION}/football/teams`, footballTeamsRouter);
+app.use(`/api/${API_VERSION}/worldcup`, worldcupRouter);
 
 // Fallback for unhandled endpoints
 app.use((req, res, next) => {
@@ -121,6 +159,18 @@ async function startServer() {
     const batchAggregator = require('./services/batchAggregator');
     batchAggregator.start();
     
+    // Initialize RapidAPI provider
+    const rapidApiProvider = require('./ingestion/providers/rapidApiFootballProvider');
+    await rapidApiProvider.initialize();
+    
+    // Start realtime engine
+    const realtimeEngine = require('./services/realtimeEngine');
+    await realtimeEngine.start();
+    
+    // Start World Cup priority service
+    const worldCupService = require('./services/worldCupPriorityService');
+    await worldCupService.initialize();
+    
     serverInstance = app.listen(PORT, () => {
       logger.info(`✓ GoalIQ Live Backend running at http://localhost:${PORT}/api/${API_VERSION}`);
     });
@@ -143,6 +193,16 @@ function shutdownGracefully(signal) {
         const batchAggregator = require('./services/batchAggregator');
         batchAggregator.stop();
         logger.info('Real-time batch aggregator stopped.');
+        
+        // Stop realtime engine
+        const realtimeEngine = require('./services/realtimeEngine');
+        await realtimeEngine.stop();
+        logger.info('Realtime engine stopped.');
+        
+        // Stop World Cup priority service
+        const worldCupService = require('./services/worldCupPriorityService');
+        await worldCupService.stop();
+        logger.info('World Cup priority service stopped.');
         
         logger.info('✓ Graceful shutdown completed. Exiting process.');
         process.exit(0);
