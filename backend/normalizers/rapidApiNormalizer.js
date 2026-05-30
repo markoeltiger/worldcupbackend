@@ -100,14 +100,27 @@ function normalizeVenue(rawVenue) {
 function normalizeStatus(status) {
   if (!status) return 'NS';
   
-  const s = status.toLowerCase();
-  if (s.includes('live') || s.includes("'")) return 'LIVE';
-  if (s.includes('half time') || s.includes('ht')) return 'HT';
-  if (s.includes('full time') || s.includes('ft')) return 'FT';
-  if (s.includes('postponed')) return 'POSTPONED';
-  if (s.includes('cancelled')) return 'CANCELLED';
-  if (s.includes('suspended')) return 'SUSPENDED';
-  if (s.includes('not started') || s === 'ns') return 'NS';
+  // Handle RapidAPI status object format
+  if (typeof status === 'object') {
+    if (status.finished) return 'FT';
+    if (status.cancelled) return 'CANCELLED';
+    if (status.started && status.ongoing) return 'LIVE';
+    if (status.started && !status.ongoing) return 'HT';
+    if (!status.started) return 'NS';
+    return 'NS';
+  }
+  
+  // Handle string format
+  if (typeof status === 'string') {
+    const s = status.toLowerCase();
+    if (s.includes('live') || s.includes("'")) return 'LIVE';
+    if (s.includes('half time') || s.includes('ht')) return 'HT';
+    if (s.includes('full time') || s.includes('ft')) return 'FT';
+    if (s.includes('postponed')) return 'POSTPONED';
+    if (s.includes('cancelled')) return 'CANCELLED';
+    if (s.includes('suspended')) return 'SUSPENDED';
+    if (s.includes('not started') || s === 'ns') return 'NS';
+  }
   
   return 'NS';
 }
