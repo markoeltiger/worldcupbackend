@@ -12,7 +12,1200 @@ http://localhost:3001/api/v1
 
 ## Authentication
 
-Currently, the API does not require authentication for public endpoints. Admin endpoints may require API keys in the future.
+The API uses **Firebase Authentication** for user authentication. All protected endpoints require a valid Firebase ID token in the Authorization header.
+
+### Authentication Methods
+
+- **Google Sign In**: OAuth-based authentication through Firebase
+- **Email/Password**: Traditional email and password authentication
+- **Anonymous Guest Users**: Temporary guest accounts for onboarding
+
+### Authorization Header
+
+```http
+Authorization: Bearer <firebase_id_token>
+```
+
+### Authentication Middleware
+
+- **requireAuth**: Requires valid authentication token
+- **optionalAuth**: Optional authentication (allows guest access)
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| MISSING_TOKEN | Authentication token is required |
+| INVALID_TOKEN | Invalid or expired authentication token |
+| USER_NOT_FOUND | User not found |
+| USERNAME_TAKEN | Username already taken |
+| PROFILE_PRIVATE | This profile is private |
+
+## User Management
+
+### Get Current User Profile
+
+```http
+GET /api/v1/users/me
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "firebase_uid": "firebase-uid",
+    "email": "user@example.com",
+    "display_name": "John Doe",
+    "photo_url": "https://...",
+    "country": "US",
+    "favorite_country": "BR",
+    "favorite_teams": ["team-1", "team-2"],
+    "favorite_leagues": ["league-1"],
+    "favorite_players": ["player-1"],
+    "user_type": "user",
+    "language": "en",
+    "timezone": "UTC",
+    "is_guest": false,
+    "is_premium": false,
+    "prediction_points": 100,
+    "prediction_rank": 42,
+    "total_predictions": 10,
+    "correct_predictions": 8,
+    "followers_count": 5,
+    "following_count": 3,
+    "public_profile": true,
+    "username": "johndoe",
+    "bio": "Football enthusiast",
+    "profile_completion_score": 85,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-15T00:00:00Z"
+  }
+}
+```
+
+### Update Current User Profile
+
+```http
+PATCH /api/v1/users/me
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "display_name": "John Doe",
+  "photo_url": "https://...",
+  "country": "US",
+  "username": "johndoe",
+  "bio": "Football enthusiast"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "display_name": "John Doe",
+    "photo_url": "https://...",
+    "country": "US",
+    "username": "johndoe",
+    "bio": "Football enthusiast",
+    "updated_at": "2024-01-15T00:00:00Z"
+  }
+}
+```
+
+### Get User Preferences
+
+```http
+GET /api/v1/users/preferences
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "notifications_enabled": true,
+    "match_notifications": true,
+    "goal_notifications": true,
+    "favorite_team_notifications": true,
+    "world_cup_notifications": true,
+    "prediction_notifications": true,
+    "marketing_notifications": false,
+    "push_notifications": true,
+    "email_notifications": false,
+    "dark_mode": false,
+    "language": "en",
+    "timezone": "UTC"
+  }
+}
+```
+
+### Update User Preferences
+
+```http
+PATCH /api/v1/users/preferences
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "notifications_enabled": true,
+  "match_notifications": true,
+  "dark_mode": false,
+  "language": "en"
+}
+```
+
+### Get User Favorites
+
+```http
+GET /api/v1/users/favorites
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "favorite_country": "BR",
+    "favorite_teams": ["team-1", "team-2"],
+    "favorite_leagues": ["league-1"],
+    "favorite_players": ["player-1"]
+  }
+}
+```
+
+### Update User Favorites
+
+```http
+PATCH /api/v1/users/favorites
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "favorite_country": "BR",
+  "favorite_teams": ["team-1", "team-2"],
+  "favorite_leagues": ["league-1"],
+  "favorite_players": ["player-1"]
+}
+```
+
+### Get User Statistics
+
+```http
+GET /api/v1/users/statistics
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "prediction_points": 100,
+    "prediction_rank": 42,
+    "total_predictions": 10,
+    "correct_predictions": 8,
+    "accuracy": 80,
+    "followers_count": 5,
+    "following_count": 3,
+    "profile_completion_score": 85
+  }
+}
+```
+
+### Get Profile Completion Score
+
+```http
+GET /api/v1/users/profile-completion
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "score": 85,
+    "max_score": 100,
+    "percentage": 85
+  }
+}
+```
+
+### Get Profile Completion Suggestions
+
+```http
+GET /api/v1/users/profile-completion/suggestions
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "current_score": 85,
+    "max_score": 100,
+    "suggestions": [
+      {
+        "field": "bio",
+        "points": 10,
+        "message": "Write a short bio"
+      }
+    ]
+  }
+}
+```
+
+### Get World Cup Personalization
+
+```http
+GET /api/v1/users/worldcup
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "favorite_country": "BR",
+    "favorite_teams": ["team-1", "team-2"],
+    "favorite_players": ["player-1"],
+    "is_premium": false,
+    "language": "en",
+    "timezone": "UTC"
+  }
+}
+```
+
+### Update World Cup Personalization
+
+```http
+PATCH /api/v1/users/worldcup
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "favorite_country": "BR",
+  "favorite_teams": ["team-1", "team-2"],
+  "favorite_players": ["player-1"],
+  "language": "en"
+}
+```
+
+### Get Notification Preferences
+
+```http
+GET /api/v1/users/notifications
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "notifications_enabled": true,
+    "match_notifications": true,
+    "goal_notifications": true,
+    "favorite_team_notifications": true,
+    "world_cup_notifications": true,
+    "prediction_notifications": true,
+    "marketing_notifications": false,
+    "push_notifications": true,
+    "email_notifications": false
+  }
+}
+```
+
+### Update Notification Preferences
+
+```http
+PATCH /api/v1/users/notifications
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "notifications_enabled": true,
+  "match_notifications": true,
+  "push_notifications": true
+}
+```
+
+### Get Public User Profile
+
+```http
+GET /api/v1/users/:username
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "username": "johndoe",
+    "display_name": "John Doe",
+    "photo_url": "https://...",
+    "country": "US",
+    "bio": "Football enthusiast",
+    "prediction_points": 100,
+    "prediction_rank": 42,
+    "total_predictions": 10,
+    "correct_predictions": 8,
+    "followers_count": 5,
+    "following_count": 3,
+    "profile_completion_score": 85,
+    "favorite_teams": ["team-1"],
+    "favorite_leagues": ["league-1"],
+    "is_premium": false,
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+### Follow User
+
+```http
+POST /api/v1/users/:userId/follow
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User followed successfully"
+}
+```
+
+### Unfollow User
+
+```http
+DELETE /api/v1/users/:userId/follow
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User unfollowed successfully"
+}
+```
+
+### Get User Followers
+
+```http
+GET /api/v1/users/:userId/followers?page=1&limit=20
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+### Get User Following
+
+```http
+GET /api/v1/users/:userId/following?page=1&limit=20
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+### Get Leaderboard
+
+```http
+GET /api/v1/users/leaderboard?page=1&limit=20
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "username": "user1",
+      "display_name": "User One",
+      "photo_url": "https://...",
+      "prediction_points": 500,
+      "prediction_rank": 1
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+### Search Users
+
+```http
+GET /api/v1/users/search?q=john&page=1&limit=20
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+### Migrate Guest Account
+
+```http
+POST /api/v1/users/guest/migrate
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "anonymous_uid": "anonymous-uid",
+  "email": "user@example.com",
+  "password": "password123",
+  "display_name": "John Doe",
+  "preserve_data": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "user": {...},
+  "firebaseUser": {...}
+}
+```
+
+### Delete Account
+
+```http
+DELETE /api/v1/users/me
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Account deleted successfully"
+}
+```
+
+## Device Management
+
+### Register Device
+
+```http
+POST /api/v1/users/devices
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "platform": "ios",
+  "device_model": "iPhone 14",
+  "os_version": "16.0",
+  "app_version": "1.0.0",
+  "fcm_token": "fcm-token-string"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "device-uuid",
+    "user_id": "user-uuid",
+    "platform": "ios",
+    "device_model": "iPhone 14",
+    "is_active": true,
+    "created_at": "2024-01-15T00:00:00Z"
+  }
+}
+```
+
+### Get User Devices
+
+```http
+GET /api/v1/users/devices
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [...]
+}
+```
+
+### Update Device
+
+```http
+PATCH /api/v1/users/devices/:deviceId
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "app_version": "1.0.1",
+  "fcm_token": "new-fcm-token"
+}
+```
+
+### Delete Device
+
+```http
+DELETE /api/v1/users/devices/:deviceId
+Authorization: Bearer <firebase_id_token>
+```
+
+### Deactivate Device
+
+```http
+POST /api/v1/users/devices/:deviceId/deactivate
+Authorization: Bearer <firebase_id_token>
+```
+
+### Update FCM Token
+
+```http
+PATCH /api/v1/users/devices/:deviceId/fcm-token
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "fcm_token": "new-fcm-token"
+}
+```
+
+## User Interests
+
+### Get User Interests
+
+```http
+GET /api/v1/users/interests
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "favorite_countries": ["BR", "AR"],
+    "favorite_teams": ["team-1", "team-2"],
+    "favorite_competitions": ["competition-1"],
+    "favorite_players": ["player-1"],
+    "favorite_clubs": ["club-1"],
+    "interests": ["predictions", "live_scores"]
+  }
+}
+```
+
+### Update User Interests
+
+```http
+PATCH /api/v1/users/interests
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "favorite_countries": ["BR", "AR"],
+  "favorite_teams": ["team-1"],
+  "interests": ["predictions", "live_scores"]
+}
+```
+
+## World Cup Fan Profile
+
+### Get Fan Profile
+
+```http
+GET /api/v1/users/fan-profile
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "favorite_player": "Lionel Messi",
+    "favorite_legend": "Pelé",
+    "fan_since": 2010,
+    "world_cups_watched": 3,
+    "favorite_world_cup_moment": "Messi's goal in 2022"
+  }
+}
+```
+
+### Update Fan Profile
+
+```http
+PATCH /api/v1/users/fan-profile
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "favorite_player": "Lionel Messi",
+  "fan_since": 2010,
+  "world_cups_watched": 3
+}
+```
+
+## Recommendations
+
+### Get Personalized Recommendations
+
+```http
+GET /api/v1/users/recommendations?type=all&limit=10
+Authorization: Bearer <firebase_id_token>
+```
+
+**Query Parameters:**
+- `type` (optional): Filter by type (all, match, news, content)
+- `limit` (optional): Number of recommendations (default: 10)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "type": "match",
+      "id": "upcoming-predictions",
+      "name": "Upcoming Predictions",
+      "reason": "Based on your interest in predictions",
+      "confidence": 0.85,
+      "metadata": {...}
+    }
+  ]
+}
+```
+
+### Get Match Recommendations
+
+```http
+GET /api/v1/users/recommendations/matches?limit=5
+Authorization: Bearer <firebase_id_token>
+```
+
+### Get News Recommendations
+
+```http
+GET /api/v1/users/recommendations/news?limit=5
+Authorization: Bearer <firebase_id_token>
+```
+
+### Get Content Recommendations
+
+```http
+GET /api/v1/users/recommendations/content?limit=5
+Authorization: Bearer <firebase_id_token>
+```
+
+## Account Status
+
+### Get Account Status
+
+```http
+GET /api/v1/users/account-status
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "account_status": "active",
+    "account_suspended_at": null,
+    "account_suspended_reason": null,
+    "account_suspended_until": null,
+    "account_flagged_at": null,
+    "account_flagged_reason": null
+  }
+}
+```
+
+## Social Feed
+
+### Get User Feed
+
+```http
+GET /api/v1/users/feed?type=prediction&limit=20
+Authorization: Bearer <firebase_id_token>
+```
+
+**Query Parameters:**
+- `type` (optional): Filter by feed type (prediction, match_comment, achievement, milestone)
+- `limit` (optional): Number of items (default: 20)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "feed-uuid",
+      "user_id": "user-uuid",
+      "feed_type": "prediction",
+      "content": "I predict 2-1 for this match",
+      "likes_count": 5,
+      "comments_count": 2,
+      "created_at": "2024-01-15T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Create Feed Item
+
+```http
+POST /api/v1/users/feed
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "feed_type": "prediction",
+  "content": "I predict 2-1 for this match",
+  "is_public": true
+}
+```
+
+### Get Feed Item
+
+```http
+GET /api/v1/users/feed/:feedId
+Authorization: Bearer <firebase_id_token>
+```
+
+### Update Feed Item
+
+```http
+PATCH /api/v1/users/feed/:feedId
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "content": "Updated content",
+  "is_public": false
+}
+```
+
+### Delete Feed Item
+
+```http
+DELETE /api/v1/users/feed/:feedId
+Authorization: Bearer <firebase_id_token>
+```
+
+### Like Feed Item
+
+```http
+POST /api/v1/users/feed/:feedId/like
+Authorization: Bearer <firebase_id_token>
+```
+
+### Unlike Feed Item
+
+```http
+DELETE /api/v1/users/feed/:feedId/like
+Authorization: Bearer <firebase_id_token>
+```
+
+### Comment on Feed Item
+
+```http
+POST /api/v1/users/feed/:feedId/comments
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "comment": "Great prediction!",
+  "parent_comment_id": null
+}
+```
+
+### Get Feed Item Comments
+
+```http
+GET /api/v1/users/feed/:feedId/comments?limit=20
+Authorization: Bearer <firebase_id_token>
+```
+
+### Delete Comment
+
+```http
+DELETE /api/v1/users/feed/comments/:commentId
+Authorization: Bearer <firebase_id_token>
+```
+
+## Onboarding
+
+### Get Onboarding Status
+
+```http
+GET /api/v1/onboarding
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "onboarding-uuid",
+    "user_id": "user-uuid",
+    "favorite_country": "BR",
+    "favorite_teams": ["team-1"],
+    "interests": ["predictions", "live_scores"],
+    "user_mode": "casual",
+    "experience_level": "beginner",
+    "notification_preferences": {...},
+    "completion_rate": 85,
+    "is_completed": false,
+    "created_at": "2024-01-15T00:00:00Z"
+  }
+}
+```
+
+### Complete Onboarding
+
+```http
+POST /api/v1/onboarding/complete
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "favorite_country": "BR",
+  "favorite_teams": ["team-1"],
+  "interests": ["predictions", "live_scores"],
+  "user_mode": "casual",
+  "experience_level": "beginner",
+  "notification_preferences": {
+    "match_notifications": true,
+    "goal_notifications": true
+  }
+}
+```
+
+### Update Onboarding
+
+```http
+PATCH /api/v1/onboarding
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "favorite_teams": ["team-1", "team-2"],
+  "interests": ["predictions", "live_scores", "transfers"]
+}
+```
+
+### Get Onboarding Statistics (Admin)
+
+```http
+GET /api/v1/onboarding/statistics
+Authorization: Bearer <firebase_id_token>
+```
+
+### Reset Onboarding (Testing)
+
+```http
+POST /api/v1/onboarding/reset
+Authorization: Bearer <firebase_id_token>
+```
+
+## Referrals
+
+### Get User Referral Info
+
+```http
+GET /api/v1/users/referral
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "referral_code": "ABC12345",
+    "stats": {
+      "total_referrals": 5,
+      "completed_referrals": 3,
+      "total_points_earned": 300,
+      "pending_referrals": 2
+    }
+  }
+}
+```
+
+### Create Referral Code
+
+```http
+POST /api/v1/users/referral
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "referral-uuid",
+    "referral_code": "ABC12345",
+    "referrer_id": "user-uuid",
+    "status": "pending"
+  }
+}
+```
+
+### Redeem Referral Code
+
+```http
+POST /api/v1/users/referral/redeem
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+
+{
+  "referral_code": "ABC12345"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "referral-uuid",
+    "status": "completed",
+    "reward_points": 100
+  }
+}
+```
+
+### Get Referral History
+
+```http
+GET /api/v1/users/referral/history?status=completed
+Authorization: Bearer <firebase_id_token>
+```
+
+**Query Parameters:**
+- `status` (optional): Filter by status (pending, completed, cancelled, fraud)
+
+### Get Referral Rewards
+
+```http
+GET /api/v1/users/referral/rewards?status=claimed
+Authorization: Bearer <firebase_id_token>
+```
+
+**Query Parameters:**
+- `status` (optional): Filter by status (pending, claimed, expired)
+
+## Analytics
+
+### Track Analytics Event
+
+```http
+POST /api/v1/analytics/track
+Content-Type: application/json
+
+{
+  "event_name": "page_view",
+  "event_category": "navigation",
+  "event_data": {
+    "page": "home",
+    "referrer": "direct"
+  },
+  "platform": "ios",
+  "app_version": "1.0.0"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "event-uuid",
+    "event_name": "page_view",
+    "created_at": "2024-01-15T00:00:00Z"
+  }
+}
+```
+
+### Batch Track Events
+
+```http
+POST /api/v1/analytics/batch
+Content-Type: application/json
+
+{
+  "events": [
+    {
+      "event_name": "page_view",
+      "event_category": "navigation"
+    },
+    {
+      "event_name": "button_click",
+      "event_category": "interaction"
+    }
+  ]
+}
+```
+
+### Get User Analytics Events
+
+```http
+GET /api/v1/analytics/events?event_name=page_view&days=30
+Authorization: Bearer <firebase_id_token>
+```
+
+**Query Parameters:**
+- `event_name` (optional): Filter by event name
+- `days` (optional): Time range in days (default: 30)
+
+### Get Analytics Stats
+
+```http
+GET /api/v1/analytics/stats?days=30
+Authorization: Bearer <firebase_id_token>
+```
+
+**Query Parameters:**
+- `days` (optional): Time range in days (default: 30)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "total_events": 150,
+    "unique_events": 10,
+    "most_common_event": "page_view",
+    "event_count": 50
+  }
+}
+```
+
+### Get Event Counts
+
+```http
+GET /api/v1/analytics/counts?days=30
+Authorization: Bearer <firebase_id_token>
+```
+
+**Query Parameters:**
+- `days` (optional): Time range in days (default: 30)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "page_view": 50,
+    "button_click": 30,
+    "scroll": 20
+  }
+}
+```
+
+## Subscriptions
+
+### RevenueCat Webhook
+
+```http
+POST /api/v1/subscriptions/webhook
+Content-Type: application/json
+
+{
+  "event_type": "INITIAL_PURCHASE",
+  "customer_id": "customer-id",
+  "product_id": "product-id",
+  "entitlement_id": "entitlement-id"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Webhook processed successfully"
+}
+```
+
+### Get Subscription Status
+
+```http
+GET /api/v1/subscriptions/status
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "is_premium": true,
+    "revenuecat_customer_id": "customer-id"
+  }
+}
+```
+
+### Verify Subscription
+
+```http
+POST /api/v1/subscriptions/verify
+Authorization: Bearer <firebase_id_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "is_premium": true,
+    "revenuecat_customer_id": "customer-id",
+    "verified_at": "2024-01-15T00:00:00Z"
+  }
+}
+```
 
 ## Data Provider
 

@@ -3,62 +3,118 @@
 /**
  * middleware/auth.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Authentication middleware for Bearer token validation.
+ * Authentication middleware for Firebase JWT validation.
  *
  * RULES:
- * - Validates Bearer tokens from Authorization header
- * - Extracts user_id from token
- * - Attaches user_id to request object
+ * - Validates Firebase ID tokens from Authorization header
+ * - Verifies Firebase JWT on every authenticated request
+ * - Attaches user info to request object
  */
 
-const jwt = require('jsonwebtoken');
+const firebase = require('../config/firebase');
 const logger = require('../utils/logger');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'goal-iq-secret-key-2026';
-
 /**
- * Authentication middleware
+ * Require authentication middleware
+ * Verifies Firebase ID token and attaches user to request
  */
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+async function requireAuth(req, res, next) {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
 
-  if (!token) {
-    return res.status(401).json({
-      error: 'Access token is required',
-      code: 'MISSING_TOKEN'
-    });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      logger.error('[Auth] Token verification failed:', err.message);
-      return res.status(403).json({
-        error: 'Invalid or expired token',
-        code: 'INVALID_TOKEN'
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'MISSING_TOKEN',
+          message: 'Authentication token is required'
+        }
       });
     }
 
-    req.user = user;
+    // Verify Firebase ID token
+    const decodedToken = await firebase.verifyIdToken(token);
+    
+    // Attach user info to request
+    req.user = {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      emailVerified: decodedToken.email_verified,
+      displayName: decodedToken.name,
+      photoURL: decodedToken.picture,
+      isAnonymous: decodedToken.firebase?.sign_in_provider === 'anonymous',
+      provider: decodedToken.firebase?.sign_in_provider,
+    };
+
     next();
-  });
+  } catch (error) {
+    logger.error(`[Auth] Token verification failed: ${error.message}`);
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'INVALID_TOKEN',
+        message: 'Invalid or expired authentication token'
+      }
+    });
+  }
 }
 
 /**
- * Generate JWT token
+ * Optional authentication middleware
+ * Verifies Firebase ID token if present, but doesn't require it
  */
-function generateToken(user) {
-  return jwt.sign(
-    {
-      user_id: user.id,
-      username: user.username,
-    },
-    JWT_SECRET,
-    { expiresIn: '30d' }
-  );
+async function optionalAuth(req, res, next) {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+
+    if (!token) {
+      // No token provided, continue without user
+      req.user = null;
+      return next();
+    }
+
+    // Verify Firebase ID token
+    const decodedToken = await firebase.verifyIdToken(token);
+    
+    // Attach user info to request
+    req.user = {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      emailVerified: decodedToken.email_verified,
+      displayName: decodedToken.name,
+      photoURL: decodedToken.picture,
+      isAnonymous: decodedToken.firebase?.sign_in_provider === 'anonymous',
+      provider: decodedToken.firebase?.sign_in_provider,
+    };
+
+    next();
+  } catch (error) {
+    logger.warn(`[Auth] Optional auth verification failed: ${error.message}`);
+    // Continue without user on optional auth failure
+    req.user = null;
+    next();
+  }
+}
+
+/**
+ * Check if user is guest (anonymous)
+ */
+function isGuest(req) {
+  return req.user && req.user.isAnonymous;
+}
+
+/**
+ * Check if user is premium
+ */
+function isPremium(req) {
+  return req.user && req.user.isPremium;
 }
 
 module.exports = {
-  authenticateToken,
-  generateToken,
+  requireAuth,
+  optionalAuth,
+  isGuest,
+  isPremium,
 };

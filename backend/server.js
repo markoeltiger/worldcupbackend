@@ -28,6 +28,10 @@ const commentsRouter = require('./api/routes/comments');
 const reactionsRouter = require('./api/routes/reactions');
 const insightsRouter = require('./api/routes/insights');
 const systemRouter = require('./api/routes/system');
+const subscriptionsRouter = require('./api/routes/subscriptions');
+const onboardingRouter = require('./api/routes/onboarding');
+const referralsRouter = require('./api/routes/referrals');
+const analyticsRouter = require('./api/routes/analytics');
 
 // Import new football API routes
 const footballMatchesRouter = require('./api/routes/footballMatches');
@@ -119,6 +123,10 @@ app.use(`/api/${API_VERSION}/matches`, commentsRouter);
 app.use(`/api/${API_VERSION}/reactions`, reactionsRouter);
 app.use(`/api/${API_VERSION}/insights`, insightsRouter);
 app.use(`/api/${API_VERSION}/system`, systemRouter);
+app.use(`/api/${API_VERSION}/subscriptions`, subscriptionsRouter);
+app.use(`/api/${API_VERSION}/onboarding`, onboardingRouter);
+app.use(`/api/${API_VERSION}/users/referral`, referralsRouter);
+app.use(`/api/${API_VERSION}/analytics`, analyticsRouter);
 
 // Register new football API routes
 app.use(`/api/${API_VERSION}/football/matches`, footballMatchesRouter);
@@ -152,6 +160,11 @@ let serverInstance = null;
 // Start Server
 async function startServer() {
   try {
+    // Initialize Firebase Authentication
+    const firebase = require('./config/firebase');
+    firebase.initializeFirebase();
+    logger.info('✓ Firebase Authentication initialized');
+    
     // Connect Cache Layer (automatic failover Redis -> Memory Cache is handled inside cache manager)
     await cache.initRedis();
     
