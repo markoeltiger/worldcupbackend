@@ -2,7 +2,7 @@
 
 const { Router } = require('express');
 const predictions = require('../../services/predictionsService');
-const { authenticateToken } = require('../../middleware/auth');
+const { requireAuth } = require('../../middleware/auth');
 const db = require('../../db/supabase');
 const cache = require('../../utils/cache');
 const crypto = require('crypto');
@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const router = Router();
 
 // POST /predictions — create a prediction (Protected)
-router.post('/', authenticateToken, async (req, res, next) => {
+router.post('/', requireAuth, async (req, res, next) => {
   try {
     const { match_id, user_id, predicted_home_score, predicted_away_score } = req.body;
     
@@ -22,7 +22,7 @@ router.post('/', authenticateToken, async (req, res, next) => {
     }
 
     // Use user_id from request body or from authenticated token
-    const userId = user_id || req.user.user_id;
+    const userId = user_id || req.user.uid;
 
     // Check if match is live or finished (lock prediction)
     const match = await cache.getOrSet(`match:${match_id}`, async () => {
